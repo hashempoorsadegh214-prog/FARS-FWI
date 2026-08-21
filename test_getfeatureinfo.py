@@ -1,50 +1,57 @@
 import requests
 import re
-from urllib.parse import urljoin
 
-URL = "https://forest-fire.emergency.copernicus.eu/apps/gwis_current_situation/"
+JS_URL = "https://forest-fire.emergency.copernicus.eu/apps/gwis_current_situation/static/js/app.bundle-2.11.4.js"
 
 print("=" * 60)
-print("EFFIS RESOURCE TEST")
+print("SEARCHING EFFIS VIEWER JAVASCRIPT")
 print("=" * 60)
 
-response = requests.get(URL, timeout=60)
+response = requests.get(JS_URL, timeout=120)
 
 print("HTTP:", response.status_code)
+print("SIZE:", len(response.text))
 
-html = response.text
+js = response.text
 
-print("=" * 60)
-print("RESOURCE URLS")
-print("=" * 60)
+keywords = [
+    "fdf_sources",
+    "fdf_indexes",
+    "selectedSource",
+    "selectedIndex",
+    "ecmwf",
+    "mf010",
+    "fire danger",
+    "forecast"
+]
 
-urls = re.findall(
-    r'(?:src|href)=["\']([^"\']+)["\']',
-    html,
-    re.IGNORECASE
-)
+for keyword in keywords:
 
-found = set()
+    print("=" * 60)
+    print("KEYWORD:", keyword)
+    print("=" * 60)
 
-for item in urls:
-    full_url = urljoin(URL, item)
+    matches = list(
+        re.finditer(
+            re.escape(keyword),
+            js,
+            re.IGNORECASE
+        )
+    )
 
-    if (
-        ".js" in full_url.lower()
-        or
-        ".json" in full_url.lower()
-        or
-        "api" in full_url.lower()
-        or
-        "fdf" in full_url.lower()
-        or
-        "forecast" in full_url.lower()
-    ):
-        found.add(full_url)
+    print("FOUND:", len(matches))
 
-for url in sorted(found):
-    print(url)
+    for match in matches[:10]:
 
-print("=" * 60)
-print("TOTAL:", len(found))
-print("=" * 60)
+        start = max(
+            0,
+            match.start() - 500
+        )
+
+        end = min(
+            len(js),
+            match.end() + 1000
+        )
+
+        print(js[start:end])
+        print()
