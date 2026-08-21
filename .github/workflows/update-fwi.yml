@@ -67,19 +67,25 @@ jobs:
 
           file = "data/fwi_fars.grib"
 
-          datasets = xr.backends.CfgribBackendEntrypoint().open_dataset(
+          ds = xr.open_dataset(
               file,
-              backend_kwargs={"indexpath": ""}
+              engine="cfgrib",
+              backend_kwargs={
+                  "indexpath": ""
+              }
           )
 
           print("Variables:")
-          print(list(datasets.data_vars))
+          print(list(ds.data_vars))
 
-          variable = list(datasets.data_vars)[0]
-          da = datasets[variable]
+          variable = list(ds.data_vars)[0]
+          da = ds[variable]
 
-          lats = da.latitude.values
-          lons = da.longitude.values
+          lat_name = "latitude"
+          lon_name = "longitude"
+
+          lats = da[lat_name].values
+          lons = da[lon_name].values
           values = da.values
 
           points = []
@@ -99,13 +105,18 @@ jobs:
               "date": "2025-08-20",
               "variable": variable,
               "source": "Copernicus CEMS Fire Weather Index",
-              "resolution": "original_grid",
               "points": points
           }
 
           with open("data/fwi.json", "w", encoding="utf-8") as f:
-              json.dump(output, f, ensure_ascii=False)
+              json.dump(
+                  output,
+                  f,
+                  ensure_ascii=False,
+                  indent=2
+              )
 
+          print("FWI variable:", variable)
           print("FWI points:", len(points))
           print("Created: data/fwi.json")
           PY
