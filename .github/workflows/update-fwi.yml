@@ -18,9 +18,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install CDS API
+      - name: Install dependencies
         run: |
-          pip install "cdsapi>=0.7.7"
+          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes
 
       - name: Download FWI
         env:
@@ -37,8 +37,6 @@ jobs:
               key=os.environ["EWDS_API_KEY"]
           )
 
-          dataset = "cems-fire-historical-v1"
-
           request = {
               "product_type": "reanalysis",
               "variable": "fire_weather_index",
@@ -48,11 +46,12 @@ jobs:
               "month": "08",
               "day": "20",
               "grid": "original_grid",
-              "data_format": "grib"
+              "data_format": "grib",
+              "area": [32, 50, 27, 55.8]
           }
 
           client.retrieve(
-              dataset,
+              "cems-fire-historical-v1",
               request,
               "data/fwi_fars.grib"
           )
@@ -60,6 +59,66 @@ jobs:
 
           python request_fwi.py
 
-      - name: Check downloaded file
+      - name: Extract FWI values
         run: |
+          cat > extract_fwi.py <<'PY'
+          import json
+          import xarray as xr
+
+          file = "data/fwi_fars.grib"
+
+          datasets = xr.backends.CfgribBackendEntrypoint().open_dataset(
+              file,
+              backend_kwargs={"indexpath": ""}
+          )
+
+          print("Variables:")
+          print(list(datasets.data_vars))
+
+          variable = list(datasets.data_vars)[0]
+          da = datasets[variable]
+
+          lats = da.latitude.values
+          lons = da.longitude.values
+          values = da.values
+
+          points = []
+
+          for i, lat in enumerate(lats):
+              for j, lon in enumerate(lons):
+                  value = values[i][j]
+
+                  if value == value:
+                      points.append({
+                          "lat": float(lat),
+                          "lon": float(lon),
+                          "fwi": float(value)
+                      })
+
+          output = {
+              "date": "2025-08-20",
+              "variable": variable,
+              "source": "Copernicus CEMS Fire Weather Index",
+              "resolution": "original_grid",
+              "points": points
+          }
+
+          with open("data/fwi.json", "w", encoding="utf-8") as f:
+              json.dump(output, f, ensure_ascii=False)
+
+          print("FWI points:", len(points))
+          print("Created: data/fwi.json")
+          PY
+
+          python extract_fwi.py
+
+      - name: Check output
+        run: |
+          echo "GRIB:"
           ls -lh data/fwi_fars.grib
+
+          echo "JSON:"
+          ls -lh data/fwi.json
+
+          echo "Files:"
+          find data -maxdepth 1 -type f -print
