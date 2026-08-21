@@ -40,11 +40,6 @@ jobs:
           from shapely.geometry import Point
           from datetime import datetime, timedelta, timezone
 
-
-          # =========================================================
-          # تنظیمات
-          # =========================================================
-
           WMS_URL = "https://maps.effis.emergency.copernicus.eu/gwis"
 
           LAYER = "ecmwf.query"
@@ -52,7 +47,8 @@ jobs:
 
           BBOX = [50.0, 27.0, 55.0, 32.0]
 
-          GRID_STEP = 0.10
+          # شبکه متراکم‌تر
+          GRID_STEP = 0.05
 
           POINT_WIDTH = 101
           POINT_HEIGHT = 101
@@ -60,11 +56,6 @@ jobs:
           HALF_SIZE_METERS = 12000
 
           OUTPUT_FILE = "data/fwi_fars.json"
-
-
-          # =========================================================
-          # زمان ایران
-          # =========================================================
 
           IRAN_TZ = timezone(
               timedelta(hours=3, minutes=30)
@@ -74,20 +65,9 @@ jobs:
 
           target = now.date() + timedelta(days=1)
 
-          target_date = target.strftime(
-              "%Y-%m-%d"
-          )
+          target_date = target.strftime("%Y-%m-%d")
 
-
-          # =========================================================
-          # تبدیل میلادی به شمسی
-          # =========================================================
-
-          def gregorian_to_jalali(
-              gy,
-              gm,
-              gd
-          ):
+          def gregorian_to_jalali(gy, gm, gd):
 
               g_days = [
                   31, 28, 31, 30, 31, 30,
@@ -130,41 +110,17 @@ jobs:
               j_day_no %= 1461
 
               if j_day_no >= 366:
-
-                  jy += (
-                      j_day_no - 1
-                  ) // 365
-
-                  j_day_no = (
-                      j_day_no - 1
-                  ) % 365
+                  jy += (j_day_no - 1) // 365
+                  j_day_no = (j_day_no - 1) % 365
 
               if j_day_no < 186:
-
-                  jm = (
-                      1
-                      + j_day_no // 31
-                  )
-
-                  jd = (
-                      1
-                      + j_day_no % 31
-                  )
-
+                  jm = 1 + j_day_no // 31
+                  jd = 1 + j_day_no % 31
               else:
-
-                  jm = (
-                      7
-                      + (j_day_no - 186) // 30
-                  )
-
-                  jd = (
-                      1
-                      + (j_day_no - 186) % 30
-                  )
+                  jm = 7 + (j_day_no - 186) // 30
+                  jd = 1 + (j_day_no - 186) % 30
 
               return jy, jm, jd
-
 
           jy, jm, jd = gregorian_to_jalali(
               target.year,
@@ -172,41 +128,30 @@ jobs:
               target.day
           )
 
-          shamsi_date = (
-              f"{jy:04d}-{jm:02d}-{jd:02d}"
-          )
-
+          shamsi_date = f"{jy:04d}-{jm:02d}-{jd:02d}"
 
           print("================================")
           print("FWI FORECAST")
           print("================================")
-
           print(
               "Iran current date:",
               now.strftime("%Y-%m-%d %H:%M")
           )
-
           print(
               "Forecast Gregorian:",
               target_date
           )
-
           print(
               "Forecast Shamsi:",
               shamsi_date
           )
-
+          print(
+              "Grid step:",
+              GRID_STEP
+          )
           print("================================")
 
-
-          # =========================================================
-          # تبدیل WGS84 به EPSG:3857
-          # =========================================================
-
-          def lonlat_to_3857(
-              lon,
-              lat
-          ):
+          def lonlat_to_3857(lon, lat):
 
               x = (
                   lon
@@ -229,14 +174,7 @@ jobs:
 
               return x, y
 
-
-          # =========================================================
-          # استخراج FWI از پاسخ HTML
-          # =========================================================
-
-          def parse_fwi(
-              html
-          ):
+          def parse_fwi(html):
 
               soup = BeautifulSoup(
                   html,
@@ -271,79 +209,42 @@ jobs:
                       )
                   )
 
-                  if (
-                      "fire weather index" not in label
-                  ):
+                  if "fire weather index" not in label:
                       continue
 
                   try:
-
-                      value = float(
-                          value_text
-                      )
-
+                      value = float(value_text)
                   except ValueError:
-
                       continue
 
                   if (
                       math.isfinite(value)
-                      and
-                      0 <= value <= 200
+                      and 0 <= value <= 200
                   ):
-
                       values.append(value)
 
               if not values:
                   return None
 
-              return round(
-                  values[0],
-                  3
-              )
-
-
-          # =========================================================
-          # دریافت FWI برای یک نقطه
-          # =========================================================
+              return round(values[0], 3)
 
           session = requests.Session()
 
           session.headers.update({
-              "User-Agent":
-                  "FARS-FWI/1.0"
+              "User-Agent": "FARS-FWI/1.0"
           })
 
-
-          def get_fwi(
-              lon,
-              lat
-          ):
+          def get_fwi(lon, lat):
 
               x, y = lonlat_to_3857(
                   lon,
                   lat
               )
 
-              minx = (
-                  x
-                  - HALF_SIZE_METERS
-              )
-
-              maxx = (
-                  x
-                  + HALF_SIZE_METERS
-              )
-
-              miny = (
-                  y
-                  - HALF_SIZE_METERS
-              )
-
-              maxy = (
-                  y
-                  + HALF_SIZE_METERS
-              )
+              minx = x - HALF_SIZE_METERS
+              maxx = x + HALF_SIZE_METERS
+              miny = y - HALF_SIZE_METERS
+              maxy = y + HALF_SIZE_METERS
 
               bbox = (
                   f"{minx},"
@@ -353,61 +254,26 @@ jobs:
               )
 
               params = {
-
-                  "SERVICE":
-                      "WMS",
-
-                  "VERSION":
-                      "1.1.1",
-
-                  "REQUEST":
-                      "GetFeatureInfo",
-
-                  "LAYERS":
-                      LAYER,
-
-                  "QUERY_LAYERS":
-                      QUERY_LAYER,
-
-                  "STYLES":
-                      "",
-
-                  "SRS":
-                      "EPSG:3857",
-
-                  "BBOX":
-                      bbox,
-
-                  "WIDTH":
-                      str(POINT_WIDTH),
-
-                  "HEIGHT":
-                      str(POINT_HEIGHT),
-
-                  "X":
-                      "50",
-
-                  "Y":
-                      "50",
-
-                  "INFO_FORMAT":
-                      "text/html",
-
-                  "FEATURE_COUNT":
-                      "1",
-
-                  "FORMAT":
-                      "image/png",
-
-                  "TRANSPARENT":
-                      "TRUE",
-
-                  "TIME":
-                      target_date
+                  "SERVICE": "WMS",
+                  "VERSION": "1.1.1",
+                  "REQUEST": "GetFeatureInfo",
+                  "LAYERS": LAYER,
+                  "QUERY_LAYERS": QUERY_LAYER,
+                  "STYLES": "",
+                  "SRS": "EPSG:3857",
+                  "BBOX": bbox,
+                  "WIDTH": str(POINT_WIDTH),
+                  "HEIGHT": str(POINT_HEIGHT),
+                  "X": "50",
+                  "Y": "50",
+                  "INFO_FORMAT": "text/html",
+                  "FEATURE_COUNT": "1",
+                  "FORMAT": "image/png",
+                  "TRANSPARENT": "TRUE",
+                  "TIME": target_date
               }
 
               try:
-
                   response = session.get(
                       WMS_URL,
                       params=params,
@@ -422,73 +288,50 @@ jobs:
                   )
 
               except Exception:
-
                   return None
 
-
-          # =========================================================
-          # خواندن مرز فارس
-          # =========================================================
-
-          print(
-              "Loading fars.geojson..."
-          )
+          print("Loading fars.geojson...")
 
           fars = gpd.read_file(
               "fars.geojson"
           )
 
           if fars.crs is None:
-
               fars = fars.set_crs(
                   "EPSG:4326"
               )
-
           else:
-
               fars = fars.to_crs(
                   "EPSG:4326"
               )
 
-
           try:
-
               geometry = (
                   fars.geometry
                   .union_all()
               )
-
           except AttributeError:
-
               geometry = (
                   fars.geometry
                   .unary_union
               )
 
-
-          # =========================================================
-          # ساخت شبکه
-          # =========================================================
-
           points = []
 
           lat = BBOX[1]
 
-          while lat <= BBOX[3]:
+          while lat <= BBOX[3] + 0.000001:
 
               lon = BBOX[0]
 
-              while lon <= BBOX[2]:
+              while lon <= BBOX[2] + 0.000001:
 
                   point = Point(
                       lon,
                       lat
                   )
 
-                  if geometry.covers(
-                      point
-                  ):
-
+                  if geometry.covers(point):
                       points.append(
                           (
                               round(lon, 5),
@@ -500,7 +343,6 @@ jobs:
 
               lat += GRID_STEP
 
-
           print(
               "Grid points inside Fars:",
               len(points)
@@ -508,19 +350,11 @@ jobs:
 
           print("================================")
 
-
-          # =========================================================
-          # دریافت داده
-          # =========================================================
-
           results = []
 
           total = len(points)
 
-          for index, (
-              lon,
-              lat
-          ) in enumerate(
+          for index, (lon, lat) in enumerate(
               points,
               start=1
           ):
@@ -533,15 +367,9 @@ jobs:
               if value is not None:
 
                   results.append({
-
-                      "lat":
-                          lat,
-
-                      "lon":
-                          lon,
-
-                      "fwi":
-                          value
+                      "lat": lat,
+                      "lon": lon,
+                      "fwi": value
                   })
 
                   print(
@@ -561,68 +389,37 @@ jobs:
                       "NO DATA"
                   )
 
-
-          # =========================================================
-          # بررسی نتیجه
-          # =========================================================
-
           print("================================")
           print("FWI FORECAST RESULT")
           print("================================")
-
           print(
               "Forecast:",
               target_date
           )
-
           print(
               "Shamsi:",
               shamsi_date
           )
-
           print(
               "Valid numeric points:",
               len(results)
           )
 
-
           if not results:
-
               raise RuntimeError(
                   "No numeric FWI values were returned."
               )
-
-
-          # =========================================================
-          # آمار
-          # =========================================================
 
           values = [
               p["fwi"]
               for p in results
           ]
 
-          minimum = min(
-              values
-          )
+          minimum = min(values)
+          maximum = max(values)
+          mean = sum(values) / len(values)
 
-          maximum = max(
-              values
-          )
-
-          mean = (
-              sum(values)
-              / len(values)
-          )
-
-
-          # =========================================================
-          # طبقه‌بندی
-          # =========================================================
-
-          def risk_class(
-              value
-          ):
+          def risk_class(value):
 
               if value < 11.2:
                   return "Low"
@@ -641,22 +438,12 @@ jobs:
 
               return "Very Extreme"
 
-
           for point in results:
-
-              point["risk_class"] = (
-                  risk_class(
-                      point["fwi"]
-                  )
+              point["risk_class"] = risk_class(
+                  point["fwi"]
               )
 
-
-          # =========================================================
-          # خروجی JSON
-          # =========================================================
-
           output = {
-
               "forecast_gregorian":
                   target_date,
 
@@ -693,7 +480,6 @@ jobs:
                   GRID_STEP,
 
               "statistics": {
-
                   "min":
                       round(
                           minimum,
@@ -720,7 +506,6 @@ jobs:
                   results
           }
 
-
           with open(
               OUTPUT_FILE,
               "w",
@@ -734,55 +519,37 @@ jobs:
                   indent=2
               )
 
-
           print("================================")
           print("FWI JSON READY")
           print("================================")
-
           print(
               "File:",
               OUTPUT_FILE
           )
-
           print(
               "Forecast:",
               target_date
           )
-
           print(
               "Shamsi:",
               shamsi_date
           )
-
           print(
               "Minimum:",
-              round(
-                  minimum,
-                  3
-              )
+              round(minimum, 3)
           )
-
           print(
               "Maximum:",
-              round(
-                  maximum,
-                  3
-              )
+              round(maximum, 3)
           )
-
           print(
               "Mean:",
-              round(
-                  mean,
-                  3
-              )
+              round(mean, 3)
           )
-
           print(
               "Points:",
               len(results)
           )
-
           print("================================")
 
           PY
@@ -812,6 +579,11 @@ jobs:
           print(
               "Shamsi:",
               data["forecast_shamsi"]
+          )
+
+          print(
+              "Grid step:",
+              data["grid_step"]
           )
 
           print(
