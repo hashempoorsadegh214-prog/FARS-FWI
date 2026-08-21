@@ -13,18 +13,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests beautifulsoup4 geopandas shapely
+          python -m pip install requests beautifulsoup4 geopandas shapely pandas xlsxwriter
+
 
       - name: Get FWI forecast
         run: |
@@ -47,7 +51,6 @@ jobs:
 
           BBOX = [50.0, 27.0, 55.0, 32.0]
 
-          # شبکه متراکم‌تر
           GRID_STEP = 0.05
 
           POINT_WIDTH = 101
@@ -66,6 +69,7 @@ jobs:
           target = now.date() + timedelta(days=1)
 
           target_date = target.strftime("%Y-%m-%d")
+
 
           def gregorian_to_jalali(gy, gm, gd):
 
@@ -122,6 +126,7 @@ jobs:
 
               return jy, jm, jd
 
+
           jy, jm, jd = gregorian_to_jalali(
               target.year,
               target.month,
@@ -129,6 +134,7 @@ jobs:
           )
 
           shamsi_date = f"{jy:04d}-{jm:02d}-{jd:02d}"
+
 
           print("================================")
           print("FWI FORECAST")
@@ -150,6 +156,7 @@ jobs:
               GRID_STEP
           )
           print("================================")
+
 
           def lonlat_to_3857(lon, lat):
 
@@ -173,6 +180,7 @@ jobs:
               )
 
               return x, y
+
 
           def parse_fwi(html):
 
@@ -228,11 +236,13 @@ jobs:
 
               return round(values[0], 3)
 
+
           session = requests.Session()
 
           session.headers.update({
               "User-Agent": "FARS-FWI/1.0"
           })
+
 
           def get_fwi(lon, lat):
 
@@ -274,6 +284,7 @@ jobs:
               }
 
               try:
+
                   response = session.get(
                       WMS_URL,
                       params=params,
@@ -288,7 +299,9 @@ jobs:
                   )
 
               except Exception:
+
                   return None
+
 
           print("Loading fars.geojson...")
 
@@ -296,33 +309,44 @@ jobs:
               "fars.geojson"
           )
 
+
           if fars.crs is None:
+
               fars = fars.set_crs(
                   "EPSG:4326"
               )
+
           else:
+
               fars = fars.to_crs(
                   "EPSG:4326"
               )
 
+
           try:
+
               geometry = (
                   fars.geometry
                   .union_all()
               )
+
           except AttributeError:
+
               geometry = (
                   fars.geometry
                   .unary_union
               )
 
+
           points = []
 
           lat = BBOX[1]
 
+
           while lat <= BBOX[3] + 0.000001:
 
               lon = BBOX[0]
+
 
               while lon <= BBOX[2] + 0.000001:
 
@@ -331,7 +355,10 @@ jobs:
                       lat
                   )
 
-                  if geometry.covers(point):
+                  if geometry.covers(
+                      point
+                  ):
+
                       points.append(
                           (
                               round(lon, 5),
@@ -343,6 +370,7 @@ jobs:
 
               lat += GRID_STEP
 
+
           print(
               "Grid points inside Fars:",
               len(points)
@@ -350,9 +378,11 @@ jobs:
 
           print("================================")
 
+
           results = []
 
           total = len(points)
+
 
           for index, (lon, lat) in enumerate(
               points,
@@ -363,6 +393,7 @@ jobs:
                   lon,
                   lat
               )
+
 
               if value is not None:
 
@@ -389,35 +420,54 @@ jobs:
                       "NO DATA"
                   )
 
+
           print("================================")
           print("FWI FORECAST RESULT")
           print("================================")
+
           print(
               "Forecast:",
               target_date
           )
+
           print(
               "Shamsi:",
               shamsi_date
           )
+
           print(
               "Valid numeric points:",
               len(results)
           )
 
+
           if not results:
+
               raise RuntimeError(
                   "No numeric FWI values were returned."
               )
+
 
           values = [
               p["fwi"]
               for p in results
           ]
 
-          minimum = min(values)
-          maximum = max(values)
-          mean = sum(values) / len(values)
+
+          minimum = min(
+              values
+          )
+
+          maximum = max(
+              values
+          )
+
+          mean = (
+              sum(values)
+              /
+              len(values)
+          )
+
 
           def risk_class(value):
 
@@ -438,12 +488,16 @@ jobs:
 
               return "Very Extreme"
 
+
           for point in results:
+
               point["risk_class"] = risk_class(
                   point["fwi"]
               )
 
+
           output = {
+
               "forecast_gregorian":
                   target_date,
 
@@ -480,6 +534,7 @@ jobs:
                   GRID_STEP,
 
               "statistics": {
+
                   "min":
                       round(
                           minimum,
@@ -506,6 +561,7 @@ jobs:
                   results
           }
 
+
           with open(
               OUTPUT_FILE,
               "w",
@@ -519,42 +575,66 @@ jobs:
                   indent=2
               )
 
+
           print("================================")
           print("FWI JSON READY")
           print("================================")
+
           print(
               "File:",
               OUTPUT_FILE
           )
+
           print(
               "Forecast:",
               target_date
           )
+
           print(
               "Shamsi:",
               shamsi_date
           )
+
           print(
               "Minimum:",
-              round(minimum, 3)
+              round(
+                  minimum,
+                  3
+              )
           )
+
           print(
               "Maximum:",
-              round(maximum, 3)
+              round(
+                  maximum,
+                  3
+              )
           )
+
           print(
               "Mean:",
-              round(mean, 3)
+              round(
+                  mean,
+                  3
+              )
           )
+
           print(
               "Points:",
               len(results)
           )
+
           print("================================")
 
           PY
 
           python request_fwi.py
+
+
+      - name: Create geographic Excel report
+        run: |
+          python report_fwi.py
+
 
       - name: Show FWI result
         run: |
@@ -569,6 +649,7 @@ jobs:
               "data/fwi_fars.json",
               encoding="utf-8"
           ) as f:
+
               data = json.load(f)
 
           print(
@@ -605,20 +686,41 @@ jobs:
               "Points:",
               data["statistics"]["count"]
           )
+
           PY
 
           echo "================================"
 
-      - name: Save FWI
+
+      - name: Check generated report
+        run: |
+          echo "================================"
+          echo "FWI GEO REPORT"
+          echo "================================"
+
+          ls -lh data/fwi_fars.json
+          ls -lh data/FARS_FWI_GeoReport.xlsx
+
+          echo "================================"
+
+
+      - name: Save FWI and Excel report
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/fwi_fars.json
+          git add data/FARS_FWI_GeoReport.xlsx
 
           if git diff --cached --quiet; then
+
             echo "No changes to commit."
+
           else
-            git commit -m "Update FWI forecast for tomorrow"
+
+            git commit \
+              -m "Update FWI forecast and geographic report"
+
             git push
+
           fi
