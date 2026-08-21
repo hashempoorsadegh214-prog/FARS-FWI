@@ -1,4 +1,4 @@
-```yaml
+
 name: Update FWI Fars
 
 on:
@@ -505,4 +505,3 @@ jobs:
             git commit -m "Update FWI forecast for tomorrow"
             git push
           fi
-```
