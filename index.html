@@ -17,21 +17,19 @@
     }
 
     :root {
-      --panel: rgba(255, 255, 255, 0.95);
-      --text: #20252b;
+      --panel: rgba(255,255,255,.96);
+      --text: #20242a;
       --muted: #68717c;
-      --border: rgba(0, 0, 0, 0.10);
-      --shadow: 0 7px 24px rgba(0, 0, 0, 0.16);
-      --accent: #b71c1c;
+      --border: rgba(0,0,0,.12);
+      --shadow: 0 7px 24px rgba(0,0,0,.18);
     }
 
     body.dark {
-      --panel: rgba(25, 30, 38, 0.96);
-      --text: #f4f4f4;
-      --muted: #bec6ce;
-      --border: rgba(255, 255, 255, 0.12);
-      --shadow: 0 7px 24px rgba(0, 0, 0, 0.42);
-      --accent: #ff6b5e;
+      --panel: rgba(24,29,37,.96);
+      --text: #f3f4f6;
+      --muted: #c3c8d0;
+      --border: rgba(255,255,255,.12);
+      --shadow: 0 7px 24px rgba(0,0,0,.45);
     }
 
     html,
@@ -40,14 +38,7 @@
       height: 100%;
       margin: 0;
       overflow: hidden;
-
-      font-family:
-        "B Nazanin",
-        "BNazanin",
-        Tahoma,
-        Arial,
-        sans-serif;
-
+      font-family: "B Nazanin", "BNazanin", Tahoma, Arial, sans-serif;
       color: var(--text);
     }
 
@@ -56,46 +47,33 @@
       height: 100vh;
     }
 
-    /* =========================================
-       هدر باریک و براق
-       ========================================= */
-
-    .top-header {
+    .header {
       position: absolute;
       z-index: 1500;
-
       top: 0;
       right: 0;
-
       width: 100%;
-
       min-height: 76px;
-
-      padding: 8px 18px;
-
+      padding: 9px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
       color: #fff;
 
       background:
         linear-gradient(
           180deg,
           #ef5350 0%,
-          #c62828 42%,
-          #991b1b 100%
+          #c62828 48%,
+          #8e1515 100%
         );
 
       box-shadow:
-        0 3px 12px rgba(80, 0, 0, 0.30);
+        0 3px 12px rgba(90,0,0,.32);
 
       border-bottom:
-        1px solid rgba(255,255,255,0.18);
-
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-
-      gap: 15px;
-
-      backdrop-filter: blur(5px);
+        1px solid rgba(255,255,255,.18);
     }
 
     .header-text {
@@ -105,169 +83,119 @@
     .main-title {
       font-size: 22px;
       font-weight: bold;
-      line-height: 1.2;
-
-      text-shadow:
-        0 1px 2px rgba(0,0,0,0.28);
+      line-height: 1.25;
+      text-shadow: 0 1px 2px rgba(0,0,0,.25);
     }
 
     .subtitle {
       margin-top: 3px;
-
       font-size: 15px;
-
-      opacity: 0.96;
-
-      line-height: 1.2;
+      font-weight: bold;
     }
 
     .date-line {
       margin-top: 2px;
-
       font-size: 12px;
-
-      opacity: 0.88;
+      opacity: .92;
     }
 
     .header-actions {
       display: flex;
       gap: 7px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
+      flex-shrink: 0;
     }
 
     .header-btn {
-      border:
-        1px solid rgba(255,255,255,0.28);
-
-      background:
-        rgba(255,255,255,0.12);
-
+      border: 1px solid rgba(255,255,255,.30);
+      background: rgba(255,255,255,.12);
       color: #fff;
-
       border-radius: 9px;
-
       padding: 7px 10px;
-
       cursor: pointer;
-
       font-family: inherit;
-
       font-size: 12px;
-
-      transition:
-        background 0.2s ease,
-        transform 0.2s ease;
     }
 
     .header-btn:hover {
-      background:
-        rgba(255,255,255,0.22);
-
-      transform: translateY(-1px);
+      background: rgba(255,255,255,.22);
     }
-
-    /* =========================================
-       پنل‌ها
-       ========================================= */
 
     .panel {
       position: absolute;
       z-index: 1200;
-
       background: var(--panel);
-
-      border:
-        1px solid var(--border);
-
+      border: 1px solid var(--border);
       border-radius: 15px;
-
       box-shadow: var(--shadow);
-
       backdrop-filter: blur(7px);
     }
 
     .filter-panel {
       top: 90px;
       left: 12px;
-
       width: 285px;
-
       padding: 14px;
     }
 
     .stats-panel {
       right: 12px;
       bottom: 12px;
-
       width: 255px;
-
       padding: 13px;
     }
 
     .legend-panel {
       left: 12px;
       bottom: 12px;
-
       width: 225px;
-
       padding: 12px;
+    }
+
+    .about-panel {
+      display: none;
+      top: 92px;
+      right: 12px;
+      width: min(590px, calc(100vw - 24px));
+      max-height: calc(100vh - 125px);
+      overflow-y: auto;
+      padding: 18px;
     }
 
     .panel-title {
       font-size: 15px;
-
       font-weight: bold;
-
       margin-bottom: 9px;
     }
 
     .filter-panel label {
       display: block;
-
-      margin-bottom: 5px;
-
+      margin-bottom: 6px;
       color: var(--muted);
-
       font-size: 13px;
     }
 
     .filter-select {
       width: 100%;
-
-      border:
-        1px solid var(--border);
-
+      border: 1px solid var(--border);
       background: var(--panel);
-
       color: var(--text);
-
       border-radius: 9px;
-
       padding: 8px;
-
       font-family: inherit;
-
       font-size: 13px;
     }
 
     .filter-status {
       margin-top: 8px;
-
       color: var(--muted);
-
       font-size: 12px;
-
       line-height: 1.7;
     }
 
     .stat-row {
       display: flex;
-
       justify-content: space-between;
-
       line-height: 1.9;
-
       font-size: 13px;
     }
 
@@ -277,114 +205,59 @@
 
     .legend-row {
       display: flex;
-
       align-items: center;
-
       gap: 7px;
-
       font-size: 12px;
-
       line-height: 1.9;
     }
 
     .legend-color {
       width: 15px;
       height: 15px;
-
       border-radius: 4px;
-
       flex: 0 0 15px;
     }
 
-    /* =========================================
-       معرفی سامانه
-       ========================================= */
-
-    .about-panel {
-      display: none;
-
-      top: 92px;
-      right: 12px;
-
-      width:
-        min(590px, calc(100vw - 24px));
-
-      max-height:
-        calc(100vh - 125px);
-
-      overflow-y: auto;
-
-      padding: 18px;
-    }
-
     .about-panel h3 {
-      margin:
-        0 0 10px;
-
-      color:
-        var(--accent);
+      margin: 0 0 10px;
+      color: #c62828;
     }
 
     .about-panel p {
       margin: 8px 0;
-
       font-size: 13px;
-
       line-height: 2;
     }
 
     .about-close {
       float: left;
-
       border: 0;
-
       background: transparent;
-
       color: var(--muted);
-
       font-size: 22px;
-
       cursor: pointer;
     }
-
-    /* =========================================
-       Loading
-       ========================================= */
 
     .loading {
       position: absolute;
       z-index: 2000;
-
-      top: 50%;
       left: 50%;
-
-      transform:
-        translate(-50%, -50%);
-
+      top: 50%;
+      transform: translate(-50%, -50%);
       background: var(--panel);
-
       color: var(--text);
-
       padding: 14px 20px;
-
       border-radius: 12px;
-
       box-shadow: var(--shadow);
-
       font-size: 14px;
     }
 
-    .leaflet-popup-content {
+    .popup {
       direction: rtl;
-
       text-align: right;
-
-      font-family:
-        "B Nazanin",
-        "BNazanin",
-        Tahoma,
-        Arial,
-        sans-serif;
+      min-width: 210px;
+      line-height: 1.9;
+      font-family: "B Nazanin", "BNazanin", Tahoma, Arial, sans-serif;
     }
 
     .popup-title {
@@ -392,39 +265,19 @@
       font-weight: bold;
     }
 
-    .popup-line {
-      line-height: 1.9;
-    }
-
     .popup-risk {
       display: inline-block;
-
-      margin-top: 4px;
-
-      padding: 2px 7px;
-
-      border-radius: 7px;
-
+      padding: 1px 7px;
+      border-radius: 6px;
       color: #fff;
-
       font-size: 12px;
-
       font-weight: bold;
     }
 
-    /* =========================================
-       موبایل
-       ========================================= */
-
     @media (max-width: 760px) {
-
-      .top-header {
+      .header {
         min-height: 72px;
-
-        padding:
-          7px 10px;
-
-        gap: 7px;
+        padding: 7px 10px;
       }
 
       .main-title {
@@ -439,48 +292,33 @@
         font-size: 11px;
       }
 
-      .header-actions {
-        flex-shrink: 0;
-      }
-
       .header-btn {
         font-size: 11px;
-
-        padding:
-          6px 7px;
+        padding: 6px 7px;
       }
 
       .filter-panel {
         top: 84px;
         left: 8px;
-
-        width:
-          calc(100vw - 16px);
+        width: calc(100vw - 16px);
       }
 
       .stats-panel {
         right: 8px;
         bottom: 8px;
-
         width: 205px;
       }
 
       .legend-panel {
         left: 8px;
         bottom: 8px;
-
         width: 178px;
       }
 
       .about-panel {
         top: 82px;
         right: 8px;
-
-        width:
-          calc(100vw - 16px);
-
-        max-height:
-          calc(100vh - 100px);
+        width: calc(100vw - 16px);
       }
     }
   </style>
@@ -488,11 +326,9 @@
 
 <body>
 
-  <!-- ==========================================
-       هدر
-       ========================================== -->
+  <div id="map"></div>
 
-  <div class="top-header">
+  <div class="header">
 
     <div class="header-text">
 
@@ -504,10 +340,7 @@
         شاخص خطر آتش‌سوزی جنگل و مرتع (FWI)
       </div>
 
-      <div
-        class="date-line"
-        id="dateLine"
-      >
+      <div class="date-line" id="dateLine">
         در حال دریافت تاریخ پیش‌بینی...
       </div>
 
@@ -515,17 +348,11 @@
 
     <div class="header-actions">
 
-      <button
-        class="header-btn"
-        id="themeBtn"
-      >
+      <button class="header-btn" id="themeBtn">
         ☀️ / 🌙
       </button>
 
-      <button
-        class="header-btn"
-        id="aboutBtn"
-      >
+      <button class="header-btn" id="aboutBtn">
         معرفی سامانه
       </button>
 
@@ -533,20 +360,13 @@
 
   </div>
 
-
-  <!-- ==========================================
-       فیلتر مکانی
-       ========================================== -->
-
   <div class="panel filter-panel">
 
     <div class="panel-title">
       فیلتر مکانی
     </div>
 
-    <label
-      for="locationFilter"
-    >
+    <label for="locationFilter">
       محدوده مورد نظر
     </label>
 
@@ -578,11 +398,6 @@
 
   </div>
 
-
-  <!-- ==========================================
-       معرفی
-       ========================================== -->
-
   <div
     class="panel about-panel"
     id="aboutPanel"
@@ -600,45 +415,37 @@
     </h3>
 
     <p>
-      این سامانه با هدف پایش و پیش‌بینی شرایط مساعد برای وقوع و گسترش
+      این سامانه برای پایش و پیش‌بینی شرایط مساعد برای وقوع و گسترش
       حریق‌های احتمالی در عرصه‌های طبیعی استان فارس طراحی شده است.
     </p>
 
     <p>
-      مبنای سامانه، شاخص
-      <strong>FWI</strong>
-      یا شاخص هواشناسی خطر آتش‌سوزی است. این شاخص با استفاده از
-      شرایط هواشناسی مؤثر بر خشکی سوخت‌های طبیعی، میزان مساعد بودن
-      شرایط جوی برای گسترش آتش را نشان می‌دهد.
+      مبنای اصلی سامانه، شاخص <strong>FWI</strong> یا شاخص هواشناسی
+      خطر آتش‌سوزی است. FWI شرایط جوی مؤثر بر خشکی سوخت‌های طبیعی
+      و مساعد بودن شرایط برای گسترش آتش را به صورت یک مقدار عددی نشان می‌دهد.
     </p>
 
     <p>
-      داده‌های پیش‌بینی FWI از
+      داده‌های پیش‌بینی این سامانه از
       <strong>Copernicus EFFIS</strong>
-      دریافت می‌شوند و در این سامانه از پیش‌بینی مدل
+      دریافت شده و برای پیش‌بینی FWI از مدل
       <strong>ECMWF</strong>
-      استفاده شده است. داده‌های دریافتی سپس برای نقاط واقع در استان
-      فارس استخراج و پردازش می‌شوند.
+      استفاده می‌شود.
     </p>
 
     <p>
-      عدد بالاتر FWI به معنای شرایط مساعدتر برای گسترش حریق است.
-      این شاخص به معنی وقوع قطعی آتش نیست؛ بلکه یک ابزار هشدار
-      و ارزیابی خطر است و بهتر است در کنار وضعیت پوشش گیاهی،
-      سوخت، توپوگرافی و سایر اطلاعات محیطی تفسیر شود.
+      داده دریافتی پس از استخراج برای نقاط داخل استان فارس پردازش
+      و روی نقشه نمایش داده می‌شود. مقدار بیشتر FWI به معنی شرایط
+      مساعدتر برای گسترش حریق است.
     </p>
 
     <p>
-      در طبقه‌بندی رسمی EFFIS، FWI در شش طبقه خطر شامل
-      کم، متوسط، زیاد، خیلی زیاد، شدید و بسیار شدید نمایش داده می‌شود.
+      FWI به معنی وقوع قطعی آتش نیست؛ بلکه یک شاخص هشدار و ارزیابی
+      خطر است و بهتر است در کنار پوشش گیاهی، وضعیت سوخت، توپوگرافی
+      و سایر عوامل محیطی تفسیر شود.
     </p>
 
   </div>
-
-
-  <!-- ==========================================
-       آمار
-       ========================================== -->
 
   <div class="panel stats-panel">
 
@@ -667,11 +474,6 @@
     </div>
 
   </div>
-
-
-  <!-- ==========================================
-       راهنمای رنگ
-       ========================================== -->
 
   <div class="panel legend-panel">
 
@@ -729,29 +531,18 @@
 
   </div>
 
-
-  <!-- ==========================================
-       Loading
-       ========================================== -->
-
   <div
     class="loading"
     id="loading"
   >
-    در حال دریافت داده‌های سامانه...
+    در حال دریافت داده FWI...
   </div>
-
 
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
   ></script>
 
-
   <script>
-
-    // =====================================================
-    // نقشه
-    // =====================================================
 
     const map =
       L.map("map").setView(
@@ -759,19 +550,12 @@
         7
       );
 
-
-    // =====================================================
-    // لایه‌های پایه روز و شب
-    // =====================================================
-
     const dayLayer =
       L.tileLayer(
         "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
         {
           maxZoom: 18,
-
-          attribution:
-            "&copy; OpenStreetMap"
+          attribution: "&copy; OpenStreetMap"
         }
       );
 
@@ -780,7 +564,6 @@
         "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
         {
           maxZoom: 18,
-
           attribution:
             "&copy; OpenStreetMap &copy; CARTO"
         }
@@ -788,37 +571,21 @@
 
     dayLayer.addTo(map);
 
-
-    // =====================================================
-    // متغیرهای داده
-    // =====================================================
-
     let fwiData = null;
-
     let farsData = null;
-
     let protectedData = null;
-
     let huntingData = null;
+
+    let farsLayer = null;
+    let protectedLayer = null;
+    let huntingLayer = null;
 
     let markers = [];
 
     let currentFilter = "all";
 
-    let farsLayer = null;
 
-    let protectedLayer = null;
-
-    let huntingLayer = null;
-
-
-    // =====================================================
-    // رنگ FWI
-    // =====================================================
-
-    function fwiColor(
-      value
-    ) {
+    function fwiColor(value) {
 
       if (value < 11.2)
         return "#2ecc71";
@@ -839,13 +606,7 @@
     }
 
 
-    // =====================================================
-    // کلاس خطر
-    // =====================================================
-
-    function fwiClass(
-      value
-    ) {
+    function fwiClass(value) {
 
       if (value < 11.2)
         return "کم";
@@ -866,172 +627,67 @@
     }
 
 
-    // =====================================================
-    // نام منطقه از GeoJSON
-    // =====================================================
+    function clearMarkers() {
 
-    function getRegionName(
-      lat,
-      lon
-    ) {
+      markers.forEach(
+        marker =>
+          map.removeLayer(marker)
+      );
 
-      let dataset = farsData;
-
-      if (
-        currentFilter === "protected"
-      ) {
-        dataset = protectedData;
-      }
-
-      if (
-        currentFilter === "hunting"
-      ) {
-        dataset = huntingData;
-      }
-
-      if (
-        !dataset ||
-        !dataset.features
-      ) {
-        return "نام منطقه موجود نیست";
-      }
-
-      for (
-        const feature of dataset.features
-      ) {
-
-        if (
-          pointInFeature(
-            lat,
-            lon,
-            feature
-          )
-        ) {
-
-          return getFeatureName(
-            feature
-          );
-
-        }
-      }
-
-      return "نام منطقه موجود نیست";
+      markers = [];
     }
 
 
-    // =====================================================
-    // پیدا کردن نام مناسب از Properties
-    // =====================================================
-
-    function getFeatureName(
-      feature
-    ) {
-
-      const properties =
-        feature.properties || {};
-
-      const preferredKeys = [
-        "name",
-        "NAME",
-        "Name",
-        "NAME_1",
-        "NAME_2",
-        "Name_1",
-        "Name_2",
-        "نام",
-        "نام منطقه",
-        "نام_منطقه",
-        "title",
-        "TITLE",
-        "site_name",
-        "SITE_NAME",
-        "area_name",
-        "AREA_NAME"
-      ];
-
-
-      for (
-        const key of preferredKeys
-      ) {
-
-        if (
-          properties[key] !== undefined &&
-          properties[key] !== null &&
-          String(
-            properties[key]
-          ).trim() !== ""
-        ) {
-
-          return String(
-            properties[key]
-          ).trim();
-
-        }
-      }
-
-
-      // در صورت نبود کلید استاندارد،
-      // اولین مقدار متنی قابل استفاده را بردار
-      for (
-        const key of Object.keys(
-          properties
-        )
-      ) {
-
-        const value =
-          properties[key];
-
-        if (
-          typeof value === "string" &&
-          value.trim().length > 2
-        ) {
-
-          return value.trim();
-
-        }
-      }
-
-
-      return "نام منطقه موجود نیست";
-    }
-
-
-    // =====================================================
-    // بررسی نقطه در Feature
-    // =====================================================
-
-    function pointInFeature(
+    function polygonContains(
       lat,
       lon,
-      feature
+      coordinates
     ) {
 
-      if (
-        !feature ||
-        !feature.geometry
+      const ring = coordinates[0];
+
+      if (!ring || ring.length < 3)
+        return false;
+
+      let inside = false;
+
+      for (
+        let i = 0, j = ring.length - 1;
+        i < ring.length;
+        j = i++
       ) {
 
-        return false;
+        const xi = ring[i][0];
+        const yi = ring[i][1];
+
+        const xj = ring[j][0];
+        const yj = ring[j][1];
+
+        const intersects =
+          ((yi > lat) !== (yj > lat)) &&
+          (
+            lon <
+            ((xj - xi) * (lat - yi) / (yj - yi)) + xi
+          );
+
+        if (intersects)
+          inside = !inside;
       }
 
-      return pointInGeometry(
-        lat,
-        lon,
-        feature.geometry
-      );
+      return inside;
     }
 
 
-    function pointInGeometry(
+    function geometryContainsPoint(
       lat,
       lon,
       geometry
     ) {
 
-      if (
-        geometry.type ===
-        "Polygon"
-      ) {
+      if (!geometry)
+        return false;
+
+      if (geometry.type === "Polygon") {
 
         return polygonContains(
           lat,
@@ -1040,11 +696,7 @@
         );
       }
 
-
-      if (
-        geometry.type ===
-        "MultiPolygon"
-      ) {
+      if (geometry.type === "MultiPolygon") {
 
         return geometry.coordinates.some(
           polygon =>
@@ -1056,122 +708,40 @@
         );
       }
 
-
       return false;
     }
 
 
-    // =====================================================
-    // Point in Polygon
-    // =====================================================
-
-    function polygonContains(
+    function featureContainsPoint(
       lat,
       lon,
-      coordinates
+      feature
     ) {
 
-      const ring =
-        coordinates[0];
-
-      if (
-        !ring ||
-        ring.length < 3
-      ) {
-
-        return false;
-      }
-
-      let inside = false;
-
-
-      for (
-        let i = 0,
-        j = ring.length - 1;
-        i < ring.length;
-        j = i++
-      ) {
-
-        const xi =
-          ring[i][0];
-
-        const yi =
-          ring[i][1];
-
-        const xj =
-          ring[j][0];
-
-        const yj =
-          ring[j][1];
-
-
-        const intersect =
-          (
-            (yi > lat) !==
-            (yj > lat)
-          )
-          &&
-          (
-            lon <
-            (
-              (xj - xi) *
-              (lat - yi) /
-              (yj - yi)
-            ) +
-            xi
-          );
-
-
-        if (
-          intersect
-        ) {
-
-          inside =
-            !inside;
-        }
-      }
-
-      return inside;
+      return geometryContainsPoint(
+        lat,
+        lon,
+        feature.geometry
+      );
     }
 
 
-    // =====================================================
-    // آیا نقطه در فیلتر انتخابی است؟
-    // =====================================================
-
-    function matchesFilter(
+    function insideDataset(
       lat,
-      lon
+      lon,
+      dataset
     ) {
 
       if (
-        currentFilter ===
-        "all"
-      ) {
-
-        return true;
-      }
-
-
-      const dataset =
-        currentFilter ===
-        "protected"
-          ? protectedData
-          : huntingData;
-
-
-      if (
         !dataset ||
-        !dataset.features
+        !Array.isArray(dataset.features)
       ) {
-
         return false;
       }
 
-
       return dataset.features.some(
         feature =>
-          pointInFeature(
+          featureContainsPoint(
             lat,
             lon,
             feature
@@ -1180,31 +750,138 @@
     }
 
 
-    // =====================================================
-    // پاک کردن نقاط
-    // =====================================================
+    function getRegionName(
+      lat,
+      lon
+    ) {
 
-    function clearMarkers() {
+      let dataset = farsData;
 
-      markers.forEach(
-        marker =>
-          map.removeLayer(
-            marker
+      if (
+        currentFilter === "protected" &&
+        protectedData
+      ) {
+        dataset = protectedData;
+      }
+
+      if (
+        currentFilter === "hunting" &&
+        huntingData
+      ) {
+        dataset = huntingData;
+      }
+
+      if (!dataset)
+        return "نام منطقه موجود نیست";
+
+      for (
+        const feature of dataset.features || []
+      ) {
+
+        if (
+          featureContainsPoint(
+            lat,
+            lon,
+            feature
           )
-      );
+        ) {
 
-      markers = [];
+          const p =
+            feature.properties || {};
+
+          const keys = [
+            "name",
+            "NAME",
+            "Name",
+            "NAME_1",
+            "NAME_2",
+            "Name_1",
+            "Name_2",
+            "title",
+            "TITLE",
+            "site_name",
+            "SITE_NAME",
+            "area_name",
+            "AREA_NAME",
+            "نام",
+            "نام منطقه"
+          ];
+
+          for (
+            const key of keys
+          ) {
+
+            if (
+              p[key] !== undefined &&
+              p[key] !== null &&
+              String(p[key]).trim() !== ""
+            ) {
+
+              return String(
+                p[key]
+              ).trim();
+            }
+          }
+
+          for (
+            const key of Object.keys(p)
+          ) {
+
+            if (
+              typeof p[key] === "string" &&
+              p[key].trim().length > 2
+            ) {
+
+              return p[key].trim();
+            }
+          }
+        }
+      }
+
+      return "نام منطقه موجود نیست";
     }
 
 
-    // =====================================================
-    // رسم نقاط FWI
-    // =====================================================
+    function matchesFilter(
+      lat,
+      lon
+    ) {
+
+      if (
+        currentFilter === "all"
+      ) {
+        return true;
+      }
+
+      if (
+        currentFilter === "protected"
+      ) {
+
+        return insideDataset(
+          lat,
+          lon,
+          protectedData
+        );
+      }
+
+      if (
+        currentFilter === "hunting"
+      ) {
+
+        return insideDataset(
+          lat,
+          lon,
+          huntingData
+        );
+      }
+
+      return true;
+    }
+
 
     function renderFWI() {
 
       clearMarkers();
-
 
       if (
         !fwiData ||
@@ -1212,48 +889,29 @@
           fwiData.points
         )
       ) {
-
         return;
       }
-
 
       const visible =
         fwiData.points.filter(
           point => {
 
             const lat =
-              Number(
-                point.lat
-              );
+              Number(point.lat);
 
             const lon =
-              Number(
-                point.lon
-              );
+              Number(point.lon);
 
             const value =
-              Number(
-                point.fwi
-              );
-
+              Number(point.fwi);
 
             if (
-              !Number.isFinite(
-                lat
-              )
-              ||
-              !Number.isFinite(
-                lon
-              )
-              ||
-              !Number.isFinite(
-                value
-              )
+              !Number.isFinite(lat) ||
+              !Number.isFinite(lon) ||
+              !Number.isFinite(value)
             ) {
-
               return false;
             }
-
 
             return matchesFilter(
               lat,
@@ -1267,20 +925,13 @@
         point => {
 
           const lat =
-            Number(
-              point.lat
-            );
+            Number(point.lat);
 
           const lon =
-            Number(
-              point.lon
-            );
+            Number(point.lon);
 
           const value =
-            Number(
-              point.fwi
-            );
-
+            Number(point.fwi);
 
           const regionName =
             getRegionName(
@@ -1288,133 +939,69 @@
               lon
             );
 
-
-          const risk =
-            fwiClass(
-              value
-            );
-
-
           const marker =
             L.circleMarker(
-              [
-                lat,
-                lon
-              ],
+              [lat, lon],
               {
                 radius: 6,
-
-                color:
-                  "#ffffff",
-
+                color: "#fff",
                 weight: 1,
-
                 fillColor:
-                  fwiColor(
-                    value
-                  ),
-
-                fillOpacity:
-                  0.86
+                  fwiColor(value),
+                fillOpacity: .86
               }
-            ).addTo(
-              map
-            );
+            ).addTo(map);
 
 
           marker.bindPopup(`
 
-            <div
-              style="
-                direction:rtl;
-                text-align:right;
-                min-width:210px;
-                line-height:1.9;
-              "
-            >
+            <div class="popup">
 
-              <div
-                class="popup-title"
-              >
-                پیش‌بینی حریق احتمالی
+              <div class="popup-title">
+                پیش‌بینی وقوع حریق احتمالی
               </div>
 
               <hr>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  نام منطقه:
-                </b>
-
+              <div>
+                <b>نام منطقه:</b>
                 ${regionName}
               </div>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  شاخص FWI:
-                </b>
-
+              <div>
+                <b>شاخص FWI:</b>
                 ${value.toFixed(2)}
               </div>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  طبقه خطر:
-                </b>
-
+              <div>
+                <b>طبقه خطر:</b>
                 <span
                   class="popup-risk"
                   style="
                     background:${fwiColor(value)};
                   "
                 >
-                  ${risk}
+                  ${fwiClass(value)}
                 </span>
               </div>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  تاریخ پیش‌بینی:
-                </b>
-
+              <div>
+                <b>تاریخ شمسی:</b>
                 ${fwiData.forecast_shamsi}
               </div>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  تاریخ میلادی:
-                </b>
-
+              <div>
+                <b>تاریخ میلادی:</b>
                 ${fwiData.forecast_gregorian}
               </div>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  عرض جغرافیایی:
-                </b>
-
+              <div>
+                <b>عرض:</b>
                 ${lat.toFixed(5)}
               </div>
 
-              <div
-                class="popup-line"
-              >
-                <b>
-                  طول جغرافیایی:
-                </b>
-
+              <div>
+                <b>طول:</b>
                 ${lon.toFixed(5)}
               </div>
 
@@ -1422,80 +1009,55 @@
 
           `);
 
-
-          markers.push(
-            marker
-          );
+          markers.push(marker);
         }
       );
 
-
-      // ===================================================
-      // آمار
-      // ===================================================
 
       const values =
         visible
           .map(
             point =>
-              Number(
-                point.fwi
-              )
+              Number(point.fwi)
           )
           .filter(
             value =>
-              Number.isFinite(
-                value
-              )
+              Number.isFinite(value)
           );
 
 
-      if (
-        values.length
-      ) {
+      document.getElementById(
+        "statCount"
+      ).textContent =
+        values.length.toLocaleString(
+          "fa-IR"
+        );
+
+
+      if (values.length) {
 
         const min =
-          Math.min(
-            ...values
-          );
+          Math.min(...values);
 
         const max =
-          Math.max(
-            ...values
-          );
+          Math.max(...values);
 
         const mean =
           values.reduce(
-            (
-              sum,
-              value
-            ) =>
+            (sum, value) =>
               sum + value,
             0
-          )
-          /
-          values.length;
-
-
-        document.getElementById(
-          "statCount"
-        ).textContent =
-          values.length.toLocaleString(
-            "fa-IR"
-          );
-
+          ) / values.length;
 
         document.getElementById(
           "statMin"
         ).textContent =
           min.toFixed(2);
 
-
         document.getElementById(
           "statMax"
         ).textContent =
           max.toFixed(2);
-
 
         document.getElementById(
           "statMean"
@@ -1505,29 +1067,20 @@
       } else {
 
         document.getElementById(
-          "statCount"
-        ).textContent =
-          "0";
-
-        document.getElementById(
           "statMin"
-        ).textContent =
-          "-";
+        ).textContent = "-";
 
         document.getElementById(
           "statMax"
-        ).textContent =
-          "-";
+        ).textContent = "-";
 
         document.getElementById(
           "statMean"
-        ).textContent =
-          "-";
+        ).textContent = "-";
       }
 
 
-      const filterNames = {
-
+      const names = {
         all:
           "کل استان فارس",
 
@@ -1542,92 +1095,67 @@
       document.getElementById(
         "filterStatus"
       ).textContent =
-        filterNames[
-          currentFilter
-        ]
-        +
-        " | "
-        +
+        names[currentFilter] +
+        " | " +
         values.length.toLocaleString(
           "fa-IR"
-        )
-        +
+        ) +
         " نقطه دارای داده FWI";
     }
 
 
-    // =====================================================
-    // مرزها
-    // =====================================================
+    function drawBoundaries() {
 
-    function createBoundaryLayers() {
+      if (farsData) {
 
-      farsLayer =
-        L.geoJSON(
-          farsData,
-          {
-            style: {
-              color:
-                "#222",
-
-              weight:
-                2,
-
-              fill:
-                false
+        farsLayer =
+          L.geoJSON(
+            farsData,
+            {
+              style: {
+                color: "#222",
+                weight: 2,
+                fill: false
+              }
             }
-          }
-        ).addTo(
-          map
-        );
+          ).addTo(map);
+      }
 
 
-      protectedLayer =
-        L.geoJSON(
-          protectedData,
-          {
-            style: {
-              color:
-                "#159447",
+      if (protectedData) {
 
-              weight:
-                1.4,
-
-              fillColor:
-                "#159447",
-
-              fillOpacity:
-                0.08
+        protectedLayer =
+          L.geoJSON(
+            protectedData,
+            {
+              style: {
+                color: "#168a47",
+                weight: 1.3,
+                fillColor: "#168a47",
+                fillOpacity: .07
+              }
             }
-          }
-        );
+          );
+      }
 
 
-      huntingLayer =
-        L.geoJSON(
-          huntingData,
-          {
-            style: {
-              color:
-                "#d62828",
+      if (huntingData) {
 
-              weight:
-                1.4,
-
-              fillColor:
-                "#d62828",
-
-              fillOpacity:
-                0.07
+        huntingLayer =
+          L.geoJSON(
+            huntingData,
+            {
+              style: {
+                color: "#d62828",
+                weight: 1.3,
+                fillColor: "#d62828",
+                fillOpacity: .06
+              }
             }
-          }
-        );
+          );
+      }
     }
 
-
-    // =====================================================
-    // فیلتر مکانی
-    // =====================================================
 
     document.getElementById(
       "locationFilter"
@@ -1645,7 +1173,6 @@
             protectedLayer
           )
         ) {
-
           map.removeLayer(
             protectedLayer
           );
@@ -1658,7 +1185,6 @@
             huntingLayer
           )
         ) {
-
           map.removeLayer(
             huntingLayer
           );
@@ -1666,24 +1192,18 @@
 
 
         if (
-          currentFilter ===
-          "protected"
+          currentFilter === "protected" &&
+          protectedLayer
         ) {
-
-          protectedLayer.addTo(
-            map
-          );
+          protectedLayer.addTo(map);
         }
 
 
         if (
-          currentFilter ===
-          "hunting"
+          currentFilter === "hunting" &&
+          huntingLayer
         ) {
-
-          huntingLayer.addTo(
-            map
-          );
+          huntingLayer.addTo(map);
         }
 
 
@@ -1691,10 +1211,6 @@
       }
     );
 
-
-    // =====================================================
-    // شب / روز
-    // =====================================================
 
     document.getElementById(
       "themeBtn"
@@ -1714,46 +1230,30 @@
         ) {
 
           if (
-            map.hasLayer(
-              dayLayer
-            )
+            map.hasLayer(dayLayer)
           ) {
-
             map.removeLayer(
               dayLayer
             );
           }
 
-
-          nightLayer.addTo(
-            map
-          );
+          nightLayer.addTo(map);
 
         } else {
 
           if (
-            map.hasLayer(
-              nightLayer
-            )
+            map.hasLayer(nightLayer)
           ) {
-
             map.removeLayer(
               nightLayer
             );
           }
 
-
-          dayLayer.addTo(
-            map
-          );
+          dayLayer.addTo(map);
         }
       }
     );
 
-
-    // =====================================================
-    // معرفی سامانه
-    // =====================================================
 
     document.getElementById(
       "aboutBtn"
@@ -1784,192 +1284,153 @@
 
 
     // =====================================================
-    // دریافت داده‌ها
+    // FWI را جداگانه و اول از همه بارگذاری می‌کنیم
     // =====================================================
 
-    Promise.all([
-
-      fetch(
-        "data/fwi_fars.json"
-      )
-      .then(
-        response => {
-
-          if (
-            !response.ok
-          ) {
-
-            throw new Error(
-              "فایل fwi_fars.json پیدا نشد."
-            );
-          }
-
-          return response.json();
-        }
-      ),
-
-      fetch(
-        "fars.geojson"
-      )
-      .then(
-        response => {
-
-          if (
-            !response.ok
-          ) {
-
-            throw new Error(
-              "فایل fars.geojson پیدا نشد."
-            );
-          }
-
-          return response.json();
-        }
-      ),
-
-      fetch(
-        "protected_areas.geojson"
-      )
-      .then(
-        response => {
-
-          if (
-            !response.ok
-          ) {
-
-            throw new Error(
-              "فایل protected_areas.geojson پیدا نشد."
-            );
-          }
-
-          return response.json();
-        }
-      ),
-
-      fetch(
-        "hunting_banned.geojson"
-      )
-      .then(
-        response => {
-
-          if (
-            !response.ok
-          ) {
-
-            throw new Error(
-              "فایل hunting_banned.geojson پیدا نشد."
-            );
-          }
-
-          return response.json();
-        }
-      )
-
-    ])
-
+    fetch(
+      "data/fwi_fars.json"
+    )
     .then(
-      (
-        [
-          fwi,
-          fars,
-          protectedAreas,
-          huntingBanned
-        ]
-      ) => {
+      response => {
 
-        fwiData =
-          fwi;
+        if (!response.ok) {
+          throw new Error(
+            "فایل FWI پیدا نشد."
+          );
+        }
 
-        farsData =
-          fars;
+        return response.json();
+      }
+    )
+    .then(
+      data => {
 
-        protectedData =
-          protectedAreas;
+        fwiData = data;
 
-        huntingData =
-          huntingBanned;
-
-
-        // ================================================
-        // تاریخ
-        // ================================================
 
         document.getElementById(
           "dateLine"
         ).textContent =
-          "پیش‌بینی برای "
-          +
-          fwi.forecast_shamsi
-          +
-          " | "
-          +
-          fwi.forecast_gregorian;
+          "پیش‌بینی برای " +
+          data.forecast_shamsi +
+          " | " +
+          data.forecast_gregorian;
 
-
-        // ================================================
-        // ایجاد مرزها
-        // ================================================
-
-        createBoundaryLayers();
-
-
-        // ================================================
-        // زوم روی فارس
-        // ================================================
-
-        if (
-          farsLayer &&
-          farsLayer
-            .getBounds()
-            .isValid()
-        ) {
-
-          map.fitBounds(
-            farsLayer.getBounds(),
-            {
-              padding:
-                [20,20]
-            }
-          );
-        }
-
-
-        // ================================================
-        // رسم نقاط
-        // ================================================
 
         renderFWI();
 
-
-        // ================================================
-        // خاموش کردن Loading
-        // ================================================
 
         document.getElementById(
           "loading"
         ).style.display =
           "none";
 
+
+        // بعد از نمایش FWI
+        // مرزها را جداگانه می‌گیریم
+
+        Promise.all([
+
+          fetch(
+            "fars.geojson"
+          )
+          .then(
+            r =>
+              r.ok
+                ? r.json()
+                : null
+          ),
+
+          fetch(
+            "protected_areas.geojson"
+          )
+          .then(
+            r =>
+              r.ok
+                ? r.json()
+                : null
+          ),
+
+          fetch(
+            "hunting_banned.geojson"
+          )
+          .then(
+            r =>
+              r.ok
+                ? r.json()
+                : null
+          )
+
+        ])
+        .then(
+          (
+            [
+              fars,
+              protectedAreas,
+              huntingBanned
+            ]
+          ) => {
+
+            farsData =
+              fars;
+
+            protectedData =
+              protectedAreas;
+
+            huntingData =
+              huntingBanned;
+
+
+            drawBoundaries();
+
+
+            if (
+              farsLayer &&
+              farsLayer
+                .getBounds()
+                .isValid()
+            ) {
+
+              map.fitBounds(
+                farsLayer.getBounds(),
+                {
+                  padding:
+                    [20,20]
+                }
+              );
+            }
+
+            renderFWI();
+          }
+        )
+        .catch(
+          error => {
+
+            console.warn(
+              "Spatial layers error:",
+              error
+            );
+
+            // خود FWI همچنان نمایش داده می‌شود
+          }
+        );
+
       }
     )
-
     .catch(
       error => {
 
-        console.error(
-          error
-        );
+        console.error(error);
 
         document.getElementById(
           "loading"
         ).textContent =
-          "خطا در دریافت داده‌های سامانه";
+          "خطا در دریافت FWI";
 
         document.getElementById(
           "filterStatus"
         ).textContent =
           error.message;
-
       }
     );
 
