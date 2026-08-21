@@ -45,14 +45,13 @@ jobs:
               "year": ["2025"],
               "month": ["08"],
               "day": ["20"],
-              "data_format": "grib",
-              "area": [32, 50, 27, 55.8]
+              "data_format": "netcdf"
           }
 
           client.retrieve(
               "cems-fire-historical-v1",
               request,
-              "data/fwi_fars.grib"
+              "data/fwi_fars.nc"
           )
           PY
 
