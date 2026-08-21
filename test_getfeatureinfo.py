@@ -8,16 +8,17 @@ response = requests.get(JS_URL, timeout=120)
 js = response.text
 
 print("=" * 70)
-print("SEARCHING VIEWER QUERY FUNCTION")
+print("SEARCHING FEATURE INFO IMPLEMENTATION")
 print("=" * 70)
 
 patterns = [
-    "updateLayer:function",
-    "updateLayer:",
-    "GetFeatureInfo",
+    "info_layer_srs",
     "defaultlayerinfoparams",
+    "GetFeatureInfo",
+    "getFeatureInfo",
+    "query_proxy",
     "info_layer",
-    "query_proxy"
+    "layerInfo"
 ]
 
 for pattern in patterns:
@@ -36,10 +37,17 @@ for pattern in patterns:
 
     print("FOUND:", len(matches))
 
-    for match in matches[:5]:
+    for match in matches[:10]:
 
-        start = max(0, match.start() - 2000)
-        end = min(len(js), match.end() + 5000)
+        start = max(
+            0,
+            match.start() - 2500
+        )
+
+        end = min(
+            len(js),
+            match.end() + 5000
+        )
 
         print(js[start:end])
-        print("\n" + "-" * 40 + "\n")
+        print("\n" + "-" * 50 + "\n")
