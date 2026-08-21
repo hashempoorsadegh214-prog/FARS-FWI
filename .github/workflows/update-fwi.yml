@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: "30 1 * * *"
 
+permissions:
+  contents: write
+
 jobs:
   update-fwi:
     runs-on: ubuntu-latest
@@ -59,73 +62,40 @@ jobs:
 
           python request_fwi.py
 
-      - name: Extract FWI values
+      - name: Extract FWI
         run: |
           cat > extract_fwi.py <<'PY'
           import json
           import numpy as np
           import xarray as xr
 
-          file = "data/fwi_fars.grib"
-
           ds = xr.open_dataset(
-              file,
+              "data/fwi_fars.grib",
               engine="cfgrib",
-              backend_kwargs={
-                  "indexpath": ""
-              }
+              backend_kwargs={"indexpath": ""}
           )
 
-          print("Variables:", list(ds.data_vars))
-          print("Dimensions:", dict(ds.sizes))
-          print("Coordinates:", list(ds.coords))
-
-          variable = "fwinx"
-          da = ds[variable]
-
-          print("FWI shape:", da.shape)
-
-          data = da.values
+          da = ds["fwinx"]
+          data = np.asarray(da.values)
 
           output = {
               "date": "2025-08-20",
-              "variable": variable,
+              "variable": "fwinx",
               "source": "Copernicus CEMS Fire Weather Index",
-              "resolution": "original_grid",
-              "value": None,
               "points": []
           }
 
           if data.ndim == 0:
-              value = float(data)
-
-              output["value"] = value
-
               output["points"].append({
-                  "fwi": value
+                  "fwi": float(data)
               })
 
           else:
-              lat_name = "latitude"
-              lon_name = "longitude"
+              data = np.squeeze(data)
+              lats = np.asarray(da["latitude"].values)
+              lons = np.asarray(da["longitude"].values)
 
-              lats = da[lat_name].values
-              lons = da[lon_name].values
-
-              data = np.asarray(data)
-
-              if data.ndim > 2:
-                  data = np.squeeze(data)
-
-              if data.ndim == 1:
-                  for i, value in enumerate(data):
-                      if np.isfinite(value):
-                          output["points"].append({
-                              "index": i,
-                              "fwi": float(value)
-                          })
-
-              elif data.ndim == 2:
+              if data.ndim == 2:
                   for i, lat in enumerate(lats):
                       for j, lon in enumerate(lons):
                           value = data[i, j]
@@ -138,28 +108,21 @@ jobs:
                               })
 
           with open("data/fwi.json", "w", encoding="utf-8") as f:
-              json.dump(
-                  output,
-                  f,
-                  ensure_ascii=False,
-                  indent=2
-              )
-
-          print("FWI variable:", variable)
-          print("FWI shape:", data.shape if hasattr(data, "shape") else "scalar")
-          print("FWI points:", len(output["points"]))
-          print("Created: data/fwi.json")
+              json.dump(output, f, ensure_ascii=False, indent=2)
           PY
 
           python extract_fwi.py
 
-      - name: Check output
+      - name: Save FWI JSON
         run: |
-          echo "GRIB:"
-          ls -lh data/fwi_fars.grib
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          echo "JSON:"
-          ls -lh data/fwi.json
+          git add data/fwi.json
 
-          echo "JSON preview:"
-          head -80 data/fwi.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update FWI data"
+            git push
+          fi
