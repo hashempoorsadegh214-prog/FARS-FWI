@@ -42,16 +42,19 @@ jobs:
           import geopandas as gpd
 
           from datetime import datetime, timedelta, timezone
-          from xml.etree import ElementTree as ET
           from shapely.geometry import Point
 
 
-          # =========================================================
-          # تنظیمات
-          # =========================================================
+          # =====================================================
+          # تنظیمات اصلی
+          # =====================================================
 
           WMS_URL = "https://maps.effis.emergency.copernicus.eu/effis"
 
+          # لایه‌ای که GetCapabilities واقعی EFFIS برگرداند
+          FWI_LAYER = "mf010.fwi"
+
+          # محدوده فارس
           BBOX = (
               50.0,
               27.0,
@@ -63,9 +66,9 @@ jobs:
           HEIGHT = 1000
 
 
-          # =========================================================
+          # =====================================================
           # زمان ایران
-          # =========================================================
+          # =====================================================
 
           IRAN_TZ = timezone(
               timedelta(hours=3, minutes=30)
@@ -73,9 +76,12 @@ jobs:
 
           now = datetime.now(IRAN_TZ)
 
+          # هشدار برای فردا
           target = now.date() + timedelta(days=1)
 
-          target_date = target.strftime("%Y-%m-%d")
+          target_date = target.strftime(
+              "%Y-%m-%d"
+          )
 
 
           print("================================")
@@ -93,9 +99,9 @@ jobs:
           )
 
 
-          # =========================================================
+          # =====================================================
           # تبدیل میلادی به شمسی
-          # =========================================================
+          # =====================================================
 
           def gregorian_to_jalali(gy, gm, gd):
 
@@ -187,6 +193,7 @@ jobs:
               f"{jy:04d}-{jm:02d}-{jd:02d}"
           )
 
+
           print(
               "Forecast Shamsi:",
               shamsi_date
@@ -195,12 +202,11 @@ jobs:
           print("================================")
 
 
-          # =========================================================
-          # دریافت GetCapabilities
-          # =========================================================
+          # =====================================================
+          # بررسی اینکه لایه واقعاً روی سرویس موجود است
+          # =====================================================
 
-          print("Checking EFFIS WMS capabilities...")
-          print("Server:", WMS_URL)
+          print("Checking EFFIS capabilities...")
 
           capabilities_params = {
               "SERVICE": "WMS",
@@ -219,14 +225,6 @@ jobs:
               cap_response.status_code
           )
 
-          print(
-              "Capabilities Content-Type:",
-              cap_response.headers.get(
-                  "Content-Type",
-                  ""
-              )
-          )
-
           if cap_response.status_code != 200:
 
               print(
@@ -234,223 +232,47 @@ jobs:
               )
 
               raise RuntimeError(
-                  "EFFIS GetCapabilities request failed."
+                  "EFFIS GetCapabilities failed."
               )
 
 
-          # =========================================================
-          # پیدا کردن لایه‌های FWI
-          # =========================================================
+          capabilities_text = (
+              cap_response.text
+          )
 
-          xml_text = cap_response.text
 
-          try:
+          if FWI_LAYER.lower() not in (
+              capabilities_text.lower()
+          ):
 
-              root = ET.fromstring(
-                  xml_text
-              )
-
-          except Exception as e:
+              print("================================")
+              print("FWI LAYER NOT FOUND")
+              print("================================")
 
               print(
-                  xml_text[:5000]
+                  "Requested:",
+                  FWI_LAYER
               )
 
               raise RuntimeError(
-                  f"Could not parse WMS capabilities: {e}"
+                  "mf010.fwi is not available "
+                  "in current EFFIS capabilities."
               )
 
-
-          layers = []
-
-          for elem in root.iter():
-
-              tag = elem.tag.split("}")[-1]
-
-              if tag.lower() == "layer":
-
-                  name = None
-                  title = None
-
-                  for child in elem:
-
-                      child_tag = (
-                          child.tag
-                          .split("}")[-1]
-                          .lower()
-                      )
-
-                      if child_tag == "name":
-                          name = (
-                              child.text or ""
-                          ).strip()
-
-                      elif child_tag == "title":
-                          title = (
-                              child.text or ""
-                          ).strip()
-
-                  if name:
-
-                      layers.append({
-                          "name": name,
-                          "title": title or ""
-                      })
-
-
-          print("Total WMS layers found:", len(layers))
-
-          print("================================")
-          print("FWI LAYER SEARCH")
-          print("================================")
-
-
-          # همه لایه‌هایی که FWI در نام یا عنوان دارند
-          fwi_candidates = []
-
-          for item in layers:
-
-              text = (
-                  item["name"]
-                  + " "
-                  + item["title"]
-              ).lower()
-
-              if "fwi" in text:
-
-                  fwi_candidates.append(
-                      item
-                  )
-
-
-          if fwi_candidates:
-
-              print(
-                  "FWI-related layers found:"
-              )
-
-              for item in fwi_candidates:
-
-                  print(
-                      "-",
-                      item["name"],
-                      "|",
-                      item["title"]
-                  )
-
-          else:
-
-              print(
-                  "No layer containing FWI "
-                  "was found."
-              )
-
-
-          # =========================================================
-          # انتخاب لایه
-          # =========================================================
-
-          preferred_names = [
-              "ecmwf007.fwi",
-              "ecmwf.fwi",
-              "ecmwf007.FWI",
-              "ecmwf.FWI"
-          ]
-
-          selected_layer = None
-
-
-          # اول نام‌های شناخته‌شده
-          for preferred in preferred_names:
-
-              for item in layers:
-
-                  if (
-                      item["name"].lower()
-                      == preferred.lower()
-                  ):
-
-                      selected_layer = (
-                          item["name"]
-                      )
-
-                      break
-
-              if selected_layer:
-                  break
-
-
-          # اگر پیدا نشد، از بین FWIها
-          # لایه‌ای که ECMWF دارد انتخاب شود
-          if selected_layer is None:
-
-              for item in fwi_candidates:
-
-                  name = (
-                      item["name"]
-                      .lower()
-                  )
-
-                  title = (
-                      item["title"]
-                      .lower()
-                  )
-
-                  if (
-                      "ecmwf" in name
-                      or "ecmwf" in title
-                  ):
-
-                      selected_layer = (
-                          item["name"]
-                      )
-
-                      break
-
-
-          # =========================================================
-          # اگر هیچ لایه‌ای پیدا نشد
-          # =========================================================
-
-          if selected_layer is None:
-
-              print("================================")
-              print(
-                  "AVAILABLE FWI CANDIDATES"
-              )
-              print("================================")
-
-              for item in fwi_candidates:
-
-                  print(
-                      item["name"],
-                      "|",
-                      item["title"]
-                  )
-
-              raise RuntimeError(
-                  "No ECMWF FWI layer was found "
-                  "automatically in EFFIS WMS."
-              )
-
-
-          print("================================")
-          print("SELECTED FWI LAYER")
-          print("================================")
 
           print(
-              "Layer:",
-              selected_layer
+              "Confirmed FWI layer:",
+              FWI_LAYER
           )
 
           print("================================")
 
 
-          # =========================================================
+          # =====================================================
           # درخواست GetMap
-          # =========================================================
+          # =====================================================
 
-          map_params = {
+          params = {
 
               "SERVICE": "WMS",
 
@@ -459,9 +281,10 @@ jobs:
               "REQUEST": "GetMap",
 
               "LAYERS":
-                  selected_layer,
+                  FWI_LAYER,
 
-              "STYLES": "",
+              "STYLES":
+                  "",
 
               "SRS":
                   "EPSG:4326",
@@ -490,23 +313,23 @@ jobs:
 
 
           print("================================")
-          print("REQUESTING FWI MAP")
+          print("REQUESTING FWI")
           print("================================")
 
           print(
               "Layer:",
-              selected_layer
+              FWI_LAYER
           )
 
           print(
-              "Date:",
+              "Forecast:",
               target_date
           )
 
 
           response = requests.get(
               WMS_URL,
-              params=map_params,
+              params=params,
               timeout=180
           )
 
@@ -524,6 +347,10 @@ jobs:
               )
           )
 
+
+          # =====================================================
+          # بررسی پاسخ
+          # =====================================================
 
           if response.status_code != 200:
 
@@ -546,20 +373,20 @@ jobs:
           )
 
 
-          # =========================================================
-          # تشخیص خطای XML حتی اگر HTTP=200 باشد
-          # =========================================================
-
+          # سرور ممکن است خطای WMS را با HTTP 200 بدهد
           if (
               "xml" in content_type
-              or "text" in content_type
-              or response.content.startswith(
+              or
+              "application/vnd.ogc.se_xml"
+              in content_type
+              or
+              response.content.startswith(
                   b"<?xml"
               )
           ):
 
               print("================================")
-              print("EFFIS WMS RESPONSE")
+              print("EFFIS WMS ERROR")
               print("================================")
 
               print(
@@ -567,28 +394,24 @@ jobs:
               )
 
               raise RuntimeError(
-                  "EFFIS returned a WMS error "
-                  "instead of a GeoTIFF."
+                  "EFFIS returned a WMS error."
               )
 
 
           if (
               "tiff" not in content_type
-              and "tif" not in content_type
+              and
+              "tif" not in content_type
           ):
-
-              print(
-                  response.content[:200]
-              )
 
               raise RuntimeError(
                   "EFFIS did not return GeoTIFF."
               )
 
 
-          # =========================================================
+          # =====================================================
           # ذخیره GeoTIFF
-          # =========================================================
+          # =====================================================
 
           with open(
               "data/fwi_forecast.tif",
@@ -605,9 +428,9 @@ jobs:
           )
 
 
-          # =========================================================
+          # =====================================================
           # خواندن مرز فارس
-          # =========================================================
+          # =====================================================
 
           fars = gpd.read_file(
               "fars.geojson"
@@ -641,9 +464,9 @@ jobs:
               )
 
 
-          # =========================================================
-          # استخراج مقادیر عددی
-          # =========================================================
+          # =====================================================
+          # استخراج مقدار عددی FWI
+          # =====================================================
 
           points = []
 
@@ -653,7 +476,7 @@ jobs:
           ) as src:
 
               print("================================")
-              print("RASTER INFORMATION")
+              print("RASTER")
               print("================================")
 
               print(
@@ -771,20 +594,20 @@ jobs:
                       })
 
 
-          # =========================================================
-          # حذف نقاط تکراری
-          # =========================================================
+          # =====================================================
+          # حذف تکراری‌ها
+          # =====================================================
 
           unique = {}
 
-          for point in points:
+          for p in points:
 
               key = (
-                  point["lat"],
-                  point["lon"]
+                  p["lat"],
+                  p["lon"]
               )
 
-              unique[key] = point
+              unique[key] = p
 
 
           points = list(
@@ -792,35 +615,50 @@ jobs:
           )
 
 
-          # =========================================================
-          # اگر هیچ مقدار عددی نبود
-          # =========================================================
+          # =====================================================
+          # بررسی نتیجه
+          # =====================================================
+
+          print("================================")
+          print("FWI FORECAST RESULT")
+          print("================================")
+
+          print(
+              "Forecast:",
+              target_date
+          )
+
+          print(
+              "Shamsi:",
+              shamsi_date
+          )
+
+          print(
+              "Valid numeric points:",
+              len(points)
+          )
+
 
           if not points:
 
               raise RuntimeError(
-                  "No numeric FWI values were "
-                  "found inside Fars."
+                  "No valid numeric FWI values "
+                  "were found inside Fars."
               )
 
 
-          # =========================================================
+          # =====================================================
           # آمار
-          # =========================================================
+          # =====================================================
 
           values = [
               p["fwi"]
               for p in points
           ]
 
+          minimum = min(values)
 
-          minimum = min(
-              values
-          )
-
-          maximum = max(
-              values
-          )
+          maximum = max(values)
 
           mean = (
               sum(values)
@@ -828,9 +666,25 @@ jobs:
           )
 
 
-          # =========================================================
-          # طبقه‌بندی FWI
-          # =========================================================
+          print(
+              "Minimum:",
+              round(minimum, 3)
+          )
+
+          print(
+              "Maximum:",
+              round(maximum, 3)
+          )
+
+          print(
+              "Mean:",
+              round(mean, 3)
+          )
+
+
+          # =====================================================
+          # طبقه‌بندی خطر
+          # =====================================================
 
           def risk_class(value):
 
@@ -852,18 +706,18 @@ jobs:
               return "Very Extreme"
 
 
-          for point in points:
+          for p in points:
 
-              point["risk_class"] = (
+              p["risk_class"] = (
                   risk_class(
-                      point["fwi"]
+                      p["fwi"]
                   )
               )
 
 
-          # =========================================================
-          # خروجی JSON
-          # =========================================================
+          # =====================================================
+          # ساخت JSON
+          # =====================================================
 
           output = {
 
@@ -879,10 +733,10 @@ jobs:
                   ),
 
               "source":
-                  "Copernicus EFFIS / ECMWF",
+                  "Copernicus EFFIS",
 
               "layer":
-                  selected_layer,
+                  FWI_LAYER,
 
               "region":
                   "Fars Province, Iran",
@@ -923,6 +777,10 @@ jobs:
           }
 
 
+          # =====================================================
+          # ذخیره
+          # =====================================================
+
           with open(
               "data/fwi_fars.json",
               "w",
@@ -937,13 +795,14 @@ jobs:
               )
 
 
-          # =========================================================
-          # نتیجه
-          # =========================================================
+          print("================================")
+          print("FWI JSON READY")
+          print("================================")
 
-          print("================================")
-          print("FWI FORECAST RESULT")
-          print("================================")
+          print(
+              "File:",
+              "data/fwi_fars.json"
+          )
 
           print(
               "Forecast:",
@@ -956,43 +815,15 @@ jobs:
           )
 
           print(
-              "Selected layer:",
-              selected_layer
+              "Layer:",
+              FWI_LAYER
           )
 
           print(
-              "Valid numeric points:",
+              "Points:",
               len(points)
           )
 
-          print(
-              "Minimum:",
-              round(
-                  minimum,
-                  3
-              )
-          )
-
-          print(
-              "Maximum:",
-              round(
-                  maximum,
-                  3
-              )
-          )
-
-          print(
-              "Mean:",
-              round(
-                  mean,
-                  3
-              )
-          )
-
-          print("================================")
-          print(
-              "Created: data/fwi_fars.json"
-          )
           print("================================")
 
           PY
@@ -1004,7 +835,7 @@ jobs:
         run: |
 
           echo "================================"
-          echo "FWI FARS JSON"
+          echo "FWI FARS FORECAST"
           echo "================================"
 
           python - <<'PY'
@@ -1033,12 +864,12 @@ jobs:
           )
 
           print(
-              "Min:",
+              "Minimum:",
               data["statistics"]["min"]
           )
 
           print(
-              "Max:",
+              "Maximum:",
               data["statistics"]["max"]
           )
 
@@ -1051,6 +882,7 @@ jobs:
               "Points:",
               data["statistics"]["count"]
           )
+
           PY
 
           echo "================================"
