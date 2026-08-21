@@ -5,9 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 WMS_URL = "https://maps.effis.emergency.copernicus.eu/gwis"
 
-LAYER = "ecmwf.fwi"
-QUERY_LAYER = "ecmwf.query"
-
 LON = 52.5837
 LAT = 29.5918
 
@@ -44,9 +41,6 @@ x, y = lonlat_to_3857(
     LAT
 )
 
-
-# محدوده بزرگ‌تر اطراف نقطه،
-# برای شبیه‌سازی viewport نقشه Viewer
 half_size = 50000
 
 minx = x - half_size
@@ -61,8 +55,6 @@ bbox = (
     f"{maxy}"
 )
 
-
-# مختصات نقطه داخل تصویر
 pixel_x = int(
     ((x - minx) / (maxx - minx)) * WIDTH
 )
@@ -72,84 +64,95 @@ pixel_y = int(
 )
 
 
-print("=" * 70)
-print("EFFIS VIEWER-STYLE GETFEATUREINFO TEST")
-print("=" * 70)
-
-print("Current Iran:", now.strftime("%Y-%m-%d %H:%M"))
-print("Forecast:", target_date)
-print("Point:", LAT, LON)
-print("Layer:", LAYER)
-print("Query layer:", QUERY_LAYER)
-print("CRS: EPSG:3857")
-print("BBOX:", bbox)
-print("X:", pixel_x)
-print("Y:", pixel_y)
-
-print("=" * 70)
-
-
-params = {
+base = {
     "SERVICE": "WMS",
     "VERSION": "1.1.1",
     "REQUEST": "GetFeatureInfo",
-
-    "LAYERS": LAYER,
-    "QUERY_LAYERS": QUERY_LAYER,
-
+    "QUERY_LAYERS": "ecmwf.query",
     "STYLES": "",
-
     "SRS": "EPSG:3857",
-
     "BBOX": bbox,
-
     "WIDTH": str(WIDTH),
     "HEIGHT": str(HEIGHT),
-
     "X": str(pixel_x),
     "Y": str(pixel_y),
-
     "INFO_FORMAT": "text/html",
-
-    "TIME": target_date,
-
     "FEATURE_COUNT": "10",
-
     "FORMAT": "image/png",
-    "TRANSPARENT": "TRUE"
+    "TRANSPARENT": "TRUE",
+    "TIME": target_date
 }
 
 
-print("Requesting EFFIS...")
+print("=" * 70)
+print("EFFIS QUERY TEST")
+print("=" * 70)
+print("Point:", LAT, LON)
+print("Forecast:", target_date)
+print("BBOX:", bbox)
+print("X:", pixel_x)
+print("Y:", pixel_y)
+print("=" * 70)
 
-response = requests.get(
+
+# ---------------------------------------------------------
+# TEST 1
+# ---------------------------------------------------------
+
+params1 = dict(base)
+
+params1["LAYERS"] = "ecmwf.fwi"
+
+print("TEST 1")
+print("LAYERS = ecmwf.fwi")
+print("QUERY_LAYERS = ecmwf.query")
+print("=" * 70)
+
+r1 = requests.get(
     WMS_URL,
-    params=params,
+    params=params1,
     timeout=120
 )
 
+print("HTTP:", r1.status_code)
+print("Content-Type:", r1.headers.get("Content-Type"))
+print("URL:")
+print(r1.url)
 
-print("HTTP status:", response.status_code)
+print("RESPONSE:")
+print(r1.text[:10000])
 
-print(
-    "Content-Type:",
-    response.headers.get(
-        "Content-Type",
-        ""
-    )
+print("=" * 70)
+
+
+# ---------------------------------------------------------
+# TEST 2
+# ---------------------------------------------------------
+
+params2 = dict(base)
+
+params2["LAYERS"] = "ecmwf.query"
+params2["QUERY_LAYERS"] = "ecmwf.query"
+
+print("TEST 2")
+print("LAYERS = ecmwf.query")
+print("QUERY_LAYERS = ecmwf.query")
+print("=" * 70)
+
+r2 = requests.get(
+    WMS_URL,
+    params=params2,
+    timeout=120
 )
 
-print("Final URL:")
-print(response.url)
+print("HTTP:", r2.status_code)
+print("Content-Type:", r2.headers.get("Content-Type"))
+print("URL:")
+print(r2.url)
+
+print("RESPONSE:")
+print(r2.text[:10000])
 
 print("=" * 70)
-print("RAW RESPONSE")
-print("=" * 70)
-
-print(
-    response.text[:20000]
-)
-
-print("=" * 70)
-print("END TEST")
+print("END")
 print("=" * 70)
