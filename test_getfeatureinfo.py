@@ -1,23 +1,50 @@
 import requests
-from bs4 import BeautifulSoup
+import re
 from urllib.parse import urljoin
 
 URL = "https://forest-fire.emergency.copernicus.eu/apps/gwis_current_situation/"
 
-print("=" * 50)
-print("EFFIS JAVASCRIPT FILES")
-print("=" * 50)
+print("=" * 60)
+print("EFFIS RESOURCE TEST")
+print("=" * 60)
 
 response = requests.get(URL, timeout=60)
 
 print("HTTP:", response.status_code)
 
-soup = BeautifulSoup(response.text, "html.parser")
+html = response.text
 
-for script in soup.find_all("script", src=True):
-    url = urljoin(URL, script["src"])
+print("=" * 60)
+print("RESOURCE URLS")
+print("=" * 60)
+
+urls = re.findall(
+    r'(?:src|href)=["\']([^"\']+)["\']',
+    html,
+    re.IGNORECASE
+)
+
+found = set()
+
+for item in urls:
+    full_url = urljoin(URL, item)
+
+    if (
+        ".js" in full_url.lower()
+        or
+        ".json" in full_url.lower()
+        or
+        "api" in full_url.lower()
+        or
+        "fdf" in full_url.lower()
+        or
+        "forecast" in full_url.lower()
+    ):
+        found.add(full_url)
+
+for url in sorted(found):
     print(url)
 
-print("=" * 50)
-print("END")
-print("=" * 50)
+print("=" * 60)
+print("TOTAL:", len(found))
+print("=" * 60)
