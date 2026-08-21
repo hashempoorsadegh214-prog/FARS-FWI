@@ -22,6 +22,10 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install dependencies
+        run: |
+          pip install requests pillow numpy
+
       - name: Test GWIS GetFeatureInfo
         run: |
           python - <<'PY'
@@ -74,10 +78,6 @@ jobs:
 
           print("================================")
           PY
-
-      - name: Install dependencies
-        run: |
-          pip install requests pillow numpy
 
       - name: Download FWI Forecast
         run: |
@@ -184,20 +184,10 @@ jobs:
               "TIME": target_date
           }
 
-          print("Requesting GWIS...")
-          print("Layer:", params["LAYERS"])
-          print("Time:", target_date)
-
           response = requests.get(
               url,
               params=params,
               timeout=120
-          )
-
-          print("HTTP status:", response.status_code)
-          print(
-              "Content-Type:",
-              response.headers.get("Content-Type")
           )
 
           print("================================")
@@ -205,11 +195,6 @@ jobs:
           print("================================")
           print(response.text[:5000])
           print("================================")
-
-          if response.status_code != 200:
-              raise RuntimeError(
-                  f"GWIS HTTP error: {response.status_code}"
-              )
 
           with open(
               "data/fwi.json",
