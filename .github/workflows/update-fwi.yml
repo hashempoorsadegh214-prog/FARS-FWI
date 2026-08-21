@@ -15,30 +15,19 @@ jobs:
 
     steps:
 
-      # ==========================================
-      # 1. دریافت ریپو
-      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ==========================================
-      # 2. Python
-      # ==========================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ==========================================
-      # 3. نصب ابزارها
-      # ==========================================
       - name: Install dependencies
         run: |
-          pip install requests numpy rasterio geopandas shapely
+          python -m pip install --upgrade pip
+          python -m pip install requests numpy rasterio geopandas shapely
 
-      # ==========================================
-      # 4. دریافت FWI پیش‌بینی فردا
-      # ==========================================
       - name: Download FWI forecast
         run: |
 
@@ -53,25 +42,41 @@ jobs:
           import geopandas as gpd
 
           from datetime import datetime, timedelta, timezone
-          from rasterio.io import MemoryFile
+          from xml.etree import ElementTree as ET
           from shapely.geometry import Point
 
-          # ==========================================
-          # زمان ایران
-          # ==========================================
 
-          iran_tz = timezone(
+          # =========================================================
+          # تنظیمات
+          # =========================================================
+
+          WMS_URL = "https://maps.effis.emergency.copernicus.eu/effis"
+
+          BBOX = (
+              50.0,
+              27.0,
+              55.0,
+              32.0
+          )
+
+          WIDTH = 1000
+          HEIGHT = 1000
+
+
+          # =========================================================
+          # زمان ایران
+          # =========================================================
+
+          IRAN_TZ = timezone(
               timedelta(hours=3, minutes=30)
           )
 
-          now = datetime.now(iran_tz)
+          now = datetime.now(IRAN_TZ)
 
-          # فردا
           target = now.date() + timedelta(days=1)
 
-          target_date = target.strftime(
-              "%Y-%m-%d"
-          )
+          target_date = target.strftime("%Y-%m-%d")
+
 
           print("================================")
           print("FWI FORECAST")
@@ -87,15 +92,12 @@ jobs:
               target_date
           )
 
-          # ==========================================
-          # تبدیل میلادی به شمسی
-          # ==========================================
 
-          def gregorian_to_jalali(
-              gy,
-              gm,
-              gd
-          ):
+          # =========================================================
+          # تبدیل میلادی به شمسی
+          # =========================================================
+
+          def gregorian_to_jalali(gy, gm, gd):
 
               g_days = [
                   31, 28, 31, 30, 31, 30,
@@ -174,6 +176,7 @@ jobs:
 
               return jy, jm, jd
 
+
           jy, jm, jd = gregorian_to_jalali(
               target.year,
               target.month,
@@ -191,62 +194,322 @@ jobs:
 
           print("================================")
 
-          # ==========================================
-          # تنظیمات WMS پیش‌بینی
-          # ==========================================
 
-          WMS_URL = (
-              "https://maps.effis.emergency.copernicus.eu/effis"
-          )
+          # =========================================================
+          # دریافت GetCapabilities
+          # =========================================================
 
-          LAYER = "ecmwf007.fwi"
+          print("Checking EFFIS WMS capabilities...")
+          print("Server:", WMS_URL)
 
-          BBOX = (
-              50.0,
-              27.0,
-              55.0,
-              32.0
-          )
-
-          WIDTH = 1000
-          HEIGHT = 1000
-
-          params = {
+          capabilities_params = {
               "SERVICE": "WMS",
               "VERSION": "1.1.1",
-              "REQUEST": "GetMap",
-
-              "LAYERS": LAYER,
-              "STYLES": "",
-
-              "SRS": "EPSG:4326",
-
-              "BBOX": ",".join(
-                  str(x)
-                  for x in BBOX
-              ),
-
-              "WIDTH": str(WIDTH),
-              "HEIGHT": str(HEIGHT),
-
-              # خروجی عددی GeoTIFF
-              "FORMAT": "image/tiff",
-
-              "TRANSPARENT": "TRUE",
-
-              # تاریخ فردا
-              "TIME": target_date
+              "REQUEST": "GetCapabilities"
           }
 
-          print("Requesting EFFIS...")
-          print("Layer:", LAYER)
-          print("Forecast:", target_date)
+          cap_response = requests.get(
+              WMS_URL,
+              params=capabilities_params,
+              timeout=120
+          )
+
+          print(
+              "Capabilities HTTP status:",
+              cap_response.status_code
+          )
+
+          print(
+              "Capabilities Content-Type:",
+              cap_response.headers.get(
+                  "Content-Type",
+                  ""
+              )
+          )
+
+          if cap_response.status_code != 200:
+
+              print(
+                  cap_response.text[:5000]
+              )
+
+              raise RuntimeError(
+                  "EFFIS GetCapabilities request failed."
+              )
+
+
+          # =========================================================
+          # پیدا کردن لایه‌های FWI
+          # =========================================================
+
+          xml_text = cap_response.text
+
+          try:
+
+              root = ET.fromstring(
+                  xml_text
+              )
+
+          except Exception as e:
+
+              print(
+                  xml_text[:5000]
+              )
+
+              raise RuntimeError(
+                  f"Could not parse WMS capabilities: {e}"
+              )
+
+
+          layers = []
+
+          for elem in root.iter():
+
+              tag = elem.tag.split("}")[-1]
+
+              if tag.lower() == "layer":
+
+                  name = None
+                  title = None
+
+                  for child in elem:
+
+                      child_tag = (
+                          child.tag
+                          .split("}")[-1]
+                          .lower()
+                      )
+
+                      if child_tag == "name":
+                          name = (
+                              child.text or ""
+                          ).strip()
+
+                      elif child_tag == "title":
+                          title = (
+                              child.text or ""
+                          ).strip()
+
+                  if name:
+
+                      layers.append({
+                          "name": name,
+                          "title": title or ""
+                      })
+
+
+          print("Total WMS layers found:", len(layers))
+
+          print("================================")
+          print("FWI LAYER SEARCH")
+          print("================================")
+
+
+          # همه لایه‌هایی که FWI در نام یا عنوان دارند
+          fwi_candidates = []
+
+          for item in layers:
+
+              text = (
+                  item["name"]
+                  + " "
+                  + item["title"]
+              ).lower()
+
+              if "fwi" in text:
+
+                  fwi_candidates.append(
+                      item
+                  )
+
+
+          if fwi_candidates:
+
+              print(
+                  "FWI-related layers found:"
+              )
+
+              for item in fwi_candidates:
+
+                  print(
+                      "-",
+                      item["name"],
+                      "|",
+                      item["title"]
+                  )
+
+          else:
+
+              print(
+                  "No layer containing FWI "
+                  "was found."
+              )
+
+
+          # =========================================================
+          # انتخاب لایه
+          # =========================================================
+
+          preferred_names = [
+              "ecmwf007.fwi",
+              "ecmwf.fwi",
+              "ecmwf007.FWI",
+              "ecmwf.FWI"
+          ]
+
+          selected_layer = None
+
+
+          # اول نام‌های شناخته‌شده
+          for preferred in preferred_names:
+
+              for item in layers:
+
+                  if (
+                      item["name"].lower()
+                      == preferred.lower()
+                  ):
+
+                      selected_layer = (
+                          item["name"]
+                      )
+
+                      break
+
+              if selected_layer:
+                  break
+
+
+          # اگر پیدا نشد، از بین FWIها
+          # لایه‌ای که ECMWF دارد انتخاب شود
+          if selected_layer is None:
+
+              for item in fwi_candidates:
+
+                  name = (
+                      item["name"]
+                      .lower()
+                  )
+
+                  title = (
+                      item["title"]
+                      .lower()
+                  )
+
+                  if (
+                      "ecmwf" in name
+                      or "ecmwf" in title
+                  ):
+
+                      selected_layer = (
+                          item["name"]
+                      )
+
+                      break
+
+
+          # =========================================================
+          # اگر هیچ لایه‌ای پیدا نشد
+          # =========================================================
+
+          if selected_layer is None:
+
+              print("================================")
+              print(
+                  "AVAILABLE FWI CANDIDATES"
+              )
+              print("================================")
+
+              for item in fwi_candidates:
+
+                  print(
+                      item["name"],
+                      "|",
+                      item["title"]
+                  )
+
+              raise RuntimeError(
+                  "No ECMWF FWI layer was found "
+                  "automatically in EFFIS WMS."
+              )
+
+
+          print("================================")
+          print("SELECTED FWI LAYER")
+          print("================================")
+
+          print(
+              "Layer:",
+              selected_layer
+          )
+
+          print("================================")
+
+
+          # =========================================================
+          # درخواست GetMap
+          # =========================================================
+
+          map_params = {
+
+              "SERVICE": "WMS",
+
+              "VERSION": "1.1.1",
+
+              "REQUEST": "GetMap",
+
+              "LAYERS":
+                  selected_layer,
+
+              "STYLES": "",
+
+              "SRS":
+                  "EPSG:4326",
+
+              "BBOX":
+                  ",".join(
+                      str(x)
+                      for x in BBOX
+                  ),
+
+              "WIDTH":
+                  str(WIDTH),
+
+              "HEIGHT":
+                  str(HEIGHT),
+
+              "FORMAT":
+                  "image/tiff",
+
+              "TRANSPARENT":
+                  "TRUE",
+
+              "TIME":
+                  target_date
+          }
+
+
+          print("================================")
+          print("REQUESTING FWI MAP")
+          print("================================")
+
+          print(
+              "Layer:",
+              selected_layer
+          )
+
+          print(
+              "Date:",
+              target_date
+          )
+
 
           response = requests.get(
               WMS_URL,
-              params=params,
+              params=map_params,
               timeout=180
           )
+
 
           print(
               "HTTP status:",
@@ -256,33 +519,47 @@ jobs:
           print(
               "Content-Type:",
               response.headers.get(
-                  "Content-Type"
+                  "Content-Type",
+                  ""
               )
           )
+
 
           if response.status_code != 200:
 
               print(
-                  response.text[:3000]
+                  response.text[:5000]
               )
 
               raise RuntimeError(
-                  "EFFIS WMS request failed."
+                  "EFFIS GetMap request failed."
               )
+
 
           content_type = (
               response.headers
-              .get("Content-Type", "")
+              .get(
+                  "Content-Type",
+                  ""
+              )
               .lower()
           )
 
+
+          # =========================================================
+          # تشخیص خطای XML حتی اگر HTTP=200 باشد
+          # =========================================================
+
           if (
-              "tiff" not in content_type
-              and "tif" not in content_type
+              "xml" in content_type
+              or "text" in content_type
+              or response.content.startswith(
+                  b"<?xml"
+              )
           ):
 
               print("================================")
-              print("WMS RESPONSE")
+              print("EFFIS WMS RESPONSE")
               print("================================")
 
               print(
@@ -290,12 +567,28 @@ jobs:
               )
 
               raise RuntimeError(
+                  "EFFIS returned a WMS error "
+                  "instead of a GeoTIFF."
+              )
+
+
+          if (
+              "tiff" not in content_type
+              and "tif" not in content_type
+          ):
+
+              print(
+                  response.content[:200]
+              )
+
+              raise RuntimeError(
                   "EFFIS did not return GeoTIFF."
               )
 
-          # ==========================================
-          # ذخیره TIFF
-          # ==========================================
+
+          # =========================================================
+          # ذخیره GeoTIFF
+          # =========================================================
 
           with open(
               "data/fwi_forecast.tif",
@@ -306,14 +599,15 @@ jobs:
                   response.content
               )
 
+
           print(
-              "GeoTIFF saved:"
-              " data/fwi_forecast.tif"
+              "GeoTIFF saved successfully."
           )
 
-          # ==========================================
+
+          # =========================================================
           # خواندن مرز فارس
-          # ==========================================
+          # =========================================================
 
           fars = gpd.read_file(
               "fars.geojson"
@@ -331,41 +625,57 @@ jobs:
                   "EPSG:4326"
               )
 
+
           try:
 
-              geometry = (
+              fars_geometry = (
                   fars.geometry
                   .union_all()
               )
 
           except AttributeError:
 
-              geometry = (
+              fars_geometry = (
                   fars.geometry
                   .unary_union
               )
 
-          # ==========================================
-          # استخراج مقدار FWI از TIFF
-          # ==========================================
+
+          # =========================================================
+          # استخراج مقادیر عددی
+          # =========================================================
 
           points = []
+
 
           with rasterio.open(
               "data/fwi_forecast.tif"
           ) as src:
 
-              print("Raster size:")
+              print("================================")
+              print("RASTER INFORMATION")
+              print("================================")
+
               print(
-                  src.width,
-                  "x",
+                  "Width:",
+                  src.width
+              )
+
+              print(
+                  "Height:",
                   src.height
               )
 
               print(
-                  "Raster CRS:",
+                  "CRS:",
                   src.crs
               )
+
+              print(
+                  "NoData:",
+                  src.nodata
+              )
+
 
               band = src.read(
                   1
@@ -375,10 +685,6 @@ jobs:
 
               nodata = src.nodata
 
-              print(
-                  "NoData:",
-                  nodata
-              )
 
               for row in range(
                   src.height
@@ -393,20 +699,33 @@ jobs:
                           col
                       ]
 
+
                       if not np.isfinite(
                           value
                       ):
                           continue
+
 
                       if (
                           nodata is not None
                           and
                           math.isclose(
                               float(value),
-                              float(nodata)
+                              float(nodata),
+                              rel_tol=0,
+                              abs_tol=1e-9
                           )
                       ):
                           continue
+
+
+                      if value < 0:
+                          continue
+
+
+                      if value > 200:
+                          continue
+
 
                       lon, lat = (
                           rasterio.transform.xy(
@@ -417,127 +736,103 @@ jobs:
                           )
                       )
 
+
                       point = Point(
                           float(lon),
                           float(lat)
                       )
 
-                      if not geometry.contains(
+
+                      if not fars_geometry.contains(
                           point
                       ):
                           continue
 
-                      # جلوگیری از مقادیر غیرواقعی
-                      if value < 0:
-                          continue
-
-                      if value > 200:
-                          continue
 
                       points.append({
-                          "lat": round(
-                              float(lat),
-                              6
-                          ),
-                          "lon": round(
-                              float(lon),
-                              6
-                          ),
-                          "fwi": round(
-                              float(value),
-                              3
-                          )
+
+                          "lat":
+                              round(
+                                  float(lat),
+                                  6
+                              ),
+
+                          "lon":
+                              round(
+                                  float(lon),
+                                  6
+                              ),
+
+                          "fwi":
+                              round(
+                                  float(value),
+                                  3
+                              )
                       })
 
-          # ==========================================
+
+          # =========================================================
           # حذف نقاط تکراری
-          # ==========================================
+          # =========================================================
 
           unique = {}
 
-          for p in points:
+          for point in points:
 
               key = (
-                  p["lat"],
-                  p["lon"]
+                  point["lat"],
+                  point["lon"]
               )
 
-              unique[key] = p
+              unique[key] = point
+
 
           points = list(
               unique.values()
           )
 
-          # ==========================================
-          # آمار
-          # ==========================================
 
-          print("================================")
-          print("FWI FORECAST RESULT")
-          print("================================")
-
-          print(
-              "Forecast:",
-              target_date
-          )
-
-          print(
-              "Shamsi:",
-              shamsi_date
-          )
-
-          print(
-              "Valid points:",
-              len(points)
-          )
+          # =========================================================
+          # اگر هیچ مقدار عددی نبود
+          # =========================================================
 
           if not points:
 
               raise RuntimeError(
-                  "No valid numeric FWI values "
-                  "were found inside Fars."
+                  "No numeric FWI values were "
+                  "found inside Fars."
               )
 
-          fwi_values = [
+
+          # =========================================================
+          # آمار
+          # =========================================================
+
+          values = [
               p["fwi"]
               for p in points
           ]
 
+
           minimum = min(
-              fwi_values
+              values
           )
 
           maximum = max(
-              fwi_values
+              values
           )
 
           mean = (
-              sum(fwi_values)
-              / len(fwi_values)
+              sum(values)
+              / len(values)
           )
 
-          print(
-              "Minimum:",
-              round(minimum, 3)
-          )
 
-          print(
-              "Maximum:",
-              round(maximum, 3)
-          )
+          # =========================================================
+          # طبقه‌بندی FWI
+          # =========================================================
 
-          print(
-              "Mean:",
-              round(mean, 3)
-          )
-
-          print("================================")
-
-          # ==========================================
-          # طبقه‌بندی خطر
-          # ==========================================
-
-          def fwi_class(value):
+          def risk_class(value):
 
               if value < 11.2:
                   return "Low"
@@ -556,9 +851,19 @@ jobs:
 
               return "Very Extreme"
 
-          # ==========================================
-          # خروجی
-          # ==========================================
+
+          for point in points:
+
+              point["risk_class"] = (
+                  risk_class(
+                      point["fwi"]
+                  )
+              )
+
+
+          # =========================================================
+          # خروجی JSON
+          # =========================================================
 
           output = {
 
@@ -577,7 +882,7 @@ jobs:
                   "Copernicus EFFIS / ECMWF",
 
               "layer":
-                  LAYER,
+                  selected_layer,
 
               "region":
                   "Fars Province, Iran",
@@ -591,20 +896,23 @@ jobs:
 
               "statistics": {
 
-                  "min": round(
-                      float(minimum),
-                      3
-                  ),
+                  "min":
+                      round(
+                          float(minimum),
+                          3
+                      ),
 
-                  "max": round(
-                      float(maximum),
-                      3
-                  ),
+                  "max":
+                      round(
+                          float(maximum),
+                          3
+                      ),
 
-                  "mean": round(
-                      float(mean),
-                      3
-                  ),
+                  "mean":
+                      round(
+                          float(mean),
+                          3
+                      ),
 
                   "count":
                       len(points)
@@ -614,21 +922,6 @@ jobs:
                   points
           }
 
-          # ==========================================
-          # اضافه کردن کلاس به هر نقطه
-          # ==========================================
-
-          for p in output["points"]:
-
-              p["risk_class"] = (
-                  fwi_class(
-                      p["fwi"]
-                  )
-              )
-
-          # ==========================================
-          # ذخیره JSON اصلی
-          # ==========================================
 
           with open(
               "data/fwi_fars.json",
@@ -643,14 +936,14 @@ jobs:
                   indent=2
               )
 
-          print("================================")
-          print("FWI JSON READY")
-          print("================================")
 
-          print(
-              "Output:",
-              "data/fwi_fars.json"
-          )
+          # =========================================================
+          # نتیجه
+          # =========================================================
+
+          print("================================")
+          print("FWI FORECAST RESULT")
+          print("================================")
 
           print(
               "Forecast:",
@@ -663,24 +956,55 @@ jobs:
           )
 
           print(
-              "Points:",
+              "Selected layer:",
+              selected_layer
+          )
+
+          print(
+              "Valid numeric points:",
               len(points)
           )
 
+          print(
+              "Minimum:",
+              round(
+                  minimum,
+                  3
+              )
+          )
+
+          print(
+              "Maximum:",
+              round(
+                  maximum,
+                  3
+              )
+          )
+
+          print(
+              "Mean:",
+              round(
+                  mean,
+                  3
+              )
+          )
+
+          print("================================")
+          print(
+              "Created: data/fwi_fars.json"
+          )
           print("================================")
 
           PY
 
           python request_fwi.py
 
-      # ==========================================
-      # 5. نمایش نتیجه
-      # ==========================================
-      - name: Show FWI result
+
+      - name: Show result
         run: |
 
           echo "================================"
-          echo "FWI FARS FORECAST"
+          echo "FWI FARS JSON"
           echo "================================"
 
           python - <<'PY'
@@ -690,6 +1014,7 @@ jobs:
               "data/fwi_fars.json",
               encoding="utf-8"
           ) as f:
+
               data = json.load(f)
 
           print(
@@ -703,12 +1028,17 @@ jobs:
           )
 
           print(
-              "Minimum:",
+              "Layer:",
+              data["layer"]
+          )
+
+          print(
+              "Min:",
               data["statistics"]["min"]
           )
 
           print(
-              "Maximum:",
+              "Max:",
               data["statistics"]["max"]
           )
 
@@ -725,9 +1055,7 @@ jobs:
 
           echo "================================"
 
-      # ==========================================
-      # 6. ذخیره در GitHub
-      # ==========================================
+
       - name: Save FWI
         run: |
 
