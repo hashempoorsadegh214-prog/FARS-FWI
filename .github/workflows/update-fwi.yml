@@ -1,3 +1,4 @@
+```yaml
 name: Update FWI Fars
 
 on:
@@ -13,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -23,327 +25,361 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests rasterio numpy geopandas shapely jdatetime
+          pip install requests geopandas shapely
 
-      - name: Download FWI forecast for tomorrow
+      - name: Get FWI forecast
         run: |
-          mkdir -p data
 
           cat > request_fwi.py <<'PY'
-          import requests
-          from datetime import datetime, timedelta, timezone
-          import jdatetime
 
-          # -----------------------------------------
-          # تاریخ فردا بر اساس ساعت ایران
-          # -----------------------------------------
+          import json
+          import requests
+          import geopandas as gpd
+          from datetime import datetime, timedelta, timezone
+
+          # ============================================================
+          # تنظیمات
+          # ============================================================
+
+          WMS_URL = "https://maps.effis.emergency.copernicus.eu/gwis"
+
+          LAYER = "ecmwf.fwi"
+
+          BOUNDARY_FILE = "fars.geojson"
+
+          OUTPUT_FILE = "data/fwi_fars.json"
+
+          # محدوده تقریبی استان فارس
+          WEST = 50.0
+          EAST = 55.8
+          SOUTH = 27.0
+          NORTH = 31.8
+
+          # فاصله نمونه برداری
+          STEP = 0.25
+
+          # ============================================================
+          # تاریخ ایران
+          # ============================================================
 
           iran_tz = timezone(timedelta(hours=3, minutes=30))
 
           now_iran = datetime.now(iran_tz)
 
-          target_date = (
-              now_iran.date() +
-              timedelta(days=1)
-          )
-
-          shamsi = jdatetime.date.fromgregorian(
-              year=target_date.year,
-              month=target_date.month,
-              day=target_date.day
-          )
-
-          gregorian = target_date.strftime("%Y-%m-%d")
-
-          shamsi_text = (
-              f"{shamsi.year:04d}-"
-              f"{shamsi.month:02d}-"
-              f"{shamsi.day:02d}"
-          )
+          forecast_date = now_iran.date() + timedelta(days=1)
 
           print("================================")
           print("FWI FORECAST")
           print("================================")
+
           print(
               "Iran current date:",
               now_iran.strftime("%Y-%m-%d %H:%M")
           )
+
           print(
               "Forecast Gregorian:",
-              gregorian
+              forecast_date.isoformat()
           )
+
+          # ============================================================
+          # تبدیل میلادی به شمسی
+          # ============================================================
+
+          def gregorian_to_jalali(gy, gm, gd):
+
+              g_days_in_month = [
+                  31, 28, 31, 30, 31, 30,
+                  31, 31, 30, 31, 30, 31
+              ]
+
+              j_days_in_month = [
+                  31, 31, 31, 31, 31, 31,
+                  30, 30, 30, 30, 30, 29
+              ]
+
+              gy2 = gy - 1600
+              gm2 = gm - 1
+              gd2 = gd - 1
+
+              g_day_no = (
+                  365 * gy2
+                  + (gy2 + 3) // 4
+                  - (gy2 + 99) // 100
+                  + (gy2 + 399) // 400
+              )
+
+              for i in range(gm2):
+                  g_day_no += g_days_in_month[i]
+
+              if gm2 > 1 and (
+                  gy % 4 == 0 and
+                  (gy % 100 != 0 or gy % 400 == 0)
+              ):
+                  g_day_no += 1
+
+              g_day_no += gd2
+
+              j_day_no = g_day_no - 79
+
+              j_np = j_day_no // 12053
+              j_day_no %= 12053
+
+              jy = 979 + 33 * j_np + 4 * (j_day_no // 1461)
+
+              j_day_no %= 1461
+
+              if j_day_no >= 366:
+                  jy += (j_day_no - 1) // 365
+                  j_day_no = (j_day_no - 1) % 365
+
+              i = 0
+
+              while (
+                  i < 11 and
+                  j_day_no >= j_days_in_month[i]
+              ):
+                  j_day_no -= j_days_in_month[i]
+                  i += 1
+
+              jm = i + 1
+              jd = j_day_no + 1
+
+              return jy, jm, jd
+
+          jy, jm, jd = gregorian_to_jalali(
+              forecast_date.year,
+              forecast_date.month,
+              forecast_date.day
+          )
+
+          forecast_shamsi = (
+              f"{jy:04d}-{jm:02d}-{jd:02d}"
+          )
+
           print(
               "Forecast Shamsi:",
-              shamsi_text
+              forecast_shamsi
           )
+
           print("================================")
 
-          # -----------------------------------------
-          # GWIS WMS
-          # -----------------------------------------
+          # ============================================================
+          # مرز فارس
+          # ============================================================
 
-          url = (
-              "https://maps.effis.emergency.copernicus.eu/gwis"
+          fars = gpd.read_file(
+              BOUNDARY_FILE
           )
 
-          params = {
-              "SERVICE": "WMS",
-              "VERSION": "1.1.1",
-              "REQUEST": "GetMap",
-              "LAYERS": "ecmwf.fwi",
-              "STYLES": "",
-              "FORMAT": "image/geotiff",
-              "TRANSPARENT": "TRUE",
-              "SRS": "EPSG:4326",
+          if fars.crs is None:
+              fars = fars.set_crs("EPSG:4326")
+          else:
+              fars = fars.to_crs("EPSG:4326")
 
-              # فارس و اطراف آن
-              "BBOX": "50,27,55.8,32",
+          geometry = fars.geometry.union_all()
 
-              # وضوح مناسب برای استخراج داده
-              "WIDTH": "580",
-              "HEIGHT": "500",
+          # ============================================================
+          # ساخت نقاط شبکه
+          # ============================================================
 
-              # فردا
-              "TIME": gregorian
-          }
+          points = []
 
-          print("Requesting GWIS...")
-          print("Layer:", params["LAYERS"])
-          print("Time:", params["TIME"])
+          lat = SOUTH
 
-          response = requests.get(
-              url,
-              params=params,
-              timeout=180
-          )
+          while lat <= NORTH:
 
-          print(
-              "HTTP status:",
-              response.status_code
-          )
+              lon = WEST
 
-          print(
-              "Content-Type:",
-              response.headers.get(
-                  "content-type",
-                  ""
-              )
-          )
+              while lon <= EAST:
 
-          if response.status_code != 200:
-              print(response.text[:2000])
-              raise RuntimeError(
-                  "GWIS WMS request failed."
-              )
-
-          content_type = response.headers.get(
-              "content-type",
-              ""
-          ).lower()
-
-          if (
-              "image" not in content_type
-              and
-              "tiff" not in content_type
-          ):
-              print(response.text[:2000])
-              raise RuntimeError(
-                  "GWIS did not return a GeoTIFF."
-              )
-
-          with open(
-              "data/fwi_forecast.tif",
-              "wb"
-          ) as f:
-              f.write(response.content)
-
-          # تاریخ برای مرحله بعد
-          with open(
-              "data/fwi_date.txt",
-              "w",
-              encoding="utf-8"
-          ) as f:
-              f.write(
-                  gregorian +
-                  "|" +
-                  shamsi_text
-              )
-
-          print(
-              "Saved:",
-              "data/fwi_forecast.tif"
-          )
-          PY
-
-          python request_fwi.py
-
-      - name: Extract FWI for Fars
-        run: |
-          cat > extract_fwi.py <<'PY'
-          import json
-          import numpy as np
-          import rasterio
-          import geopandas as gpd
-          from shapely.geometry import Point
-
-          RASTER_FILE = "data/fwi_forecast.tif"
-          BOUNDARY_FILE = "fars.geojson"
-          OUTPUT_FILE = "data/fwi_fars.json"
-
-          # -----------------------------------------
-          # تاریخ
-          # -----------------------------------------
-
-          with open(
-              "data/fwi_date.txt",
-              "r",
-              encoding="utf-8"
-          ) as f:
-              gregorian_date, shamsi_date = (
-                  f.read().strip().split("|")
-              )
-
-          print("================================")
-          print("READING FWI FORECAST")
-          print("================================")
-
-          # -----------------------------------------
-          # خواندن Raster
-          # -----------------------------------------
-
-          with rasterio.open(
-              RASTER_FILE
-          ) as src:
-
-              print(
-                  "Raster CRS:",
-                  src.crs
-              )
-
-              print(
-                  "Raster size:",
-                  src.width,
-                  "x",
-                  src.height
-              )
-
-              print(
-                  "Raster dtype:",
-                  src.dtypes[0]
-              )
-
-              data = src.read(1)
-
-              transform = src.transform
-
-              nodata = src.nodata
-
-              print(
-                  "NoData:",
-                  nodata
-              )
-
-              # -------------------------------------
-              # مرز فارس
-              # -------------------------------------
-
-              fars = gpd.read_file(
-                  BOUNDARY_FILE
-              )
-
-              if fars.crs is None:
-                  fars = fars.set_crs(
-                      "EPSG:4326"
-                  )
-              else:
-                  fars = fars.to_crs(
-                      "EPSG:4326"
-                  )
-
-              geometry = (
-                  fars.geometry.union_all()
-              )
-
-              points = []
-
-              # -------------------------------------
-              # استخراج مرکز سلول‌های Raster
-              # -------------------------------------
-
-              for row in range(
-                  src.height
-              ):
-
-                  for col in range(
-                      src.width
+                  if geometry.contains(
+                      gpd.points_from_xy(
+                          [lon],
+                          [lat]
+                      )[0]
                   ):
 
-                      value = data[
-                          row,
-                          col
-                      ]
-
-                      if not np.isfinite(
-                          value
-                      ):
-                          continue
-
-                      if (
-                          nodata is not None
-                          and
-                          value == nodata
-                      ):
-                          continue
-
-                      lon, lat = (
-                          rasterio.transform.xy(
-                              transform,
-                              row,
-                              col,
-                              offset="center"
+                      points.append(
+                          (
+                              round(lat, 6),
+                              round(lon, 6)
                           )
                       )
 
-                      point = Point(
-                          float(lon),
-                          float(lat)
+                  lon += STEP
+
+              lat += STEP
+
+          print(
+              "Grid points inside Fars:",
+              len(points)
+          )
+
+          # ============================================================
+          # درخواست GetFeatureInfo
+          # ============================================================
+
+          results = []
+
+          for number, (lat, lon) in enumerate(points, 1):
+
+              # یک BBOX کوچک اطراف نقطه
+              delta = 0.02
+
+              bbox = (
+                  f"{lon-delta},"
+                  f"{lat-delta},"
+                  f"{lon+delta},"
+                  f"{lat+delta}"
+              )
+
+              params = {
+
+                  "SERVICE": "WMS",
+
+                  "VERSION": "1.1.1",
+
+                  "REQUEST": "GetFeatureInfo",
+
+                  "LAYERS": LAYER,
+
+                  "QUERY_LAYERS": LAYER,
+
+                  "STYLES": "",
+
+                  "SRS": "EPSG:4326",
+
+                  "BBOX": bbox,
+
+                  "WIDTH": 101,
+
+                  "HEIGHT": 101,
+
+                  "X": 50,
+
+                  "Y": 50,
+
+                  "INFO_FORMAT": "text/plain",
+
+                  "FEATURE_COUNT": 1,
+
+                  "TIME": forecast_date.isoformat()
+              }
+
+              try:
+
+                  response = requests.get(
+                      WMS_URL,
+                      params=params,
+                      timeout=30
+                  )
+
+                  text = response.text.strip()
+
+                  if response.status_code != 200:
+                      continue
+
+                  # ----------------------------------------------------
+                  # استخراج عدد FWI از پاسخ
+                  # ----------------------------------------------------
+
+                  import re
+
+                  matches = re.findall(
+                      r"[-+]?\d+(?:\.\d+)?",
+                      text
+                  )
+
+                  if not matches:
+                      continue
+
+                  value = None
+
+                  for item in matches:
+
+                      number_value = float(item)
+
+                      if (
+                          number_value >= 0
+                          and
+                          number_value <= 150
+                      ):
+                          value = number_value
+                          break
+
+                  if value is None:
+                      continue
+
+                  results.append({
+
+                      "lat": lat,
+
+                      "lon": lon,
+
+                      "fwi": round(
+                          value,
+                          3
                       )
 
-                      if geometry.contains(
-                          point
-                      ):
+                  })
 
-                          points.append({
-                              "lat": round(
-                                  float(lat),
-                                  6
-                              ),
-                              "lon": round(
-                                  float(lon),
-                                  6
-                              ),
-                              "fwi": round(
-                                  float(value),
-                                  3
-                              )
-                          })
+                  print(
+                      f"{number}/{len(points)} "
+                      f"LAT={lat} "
+                      f"LON={lon} "
+                      f"FWI={value}"
+                  )
 
-          # -----------------------------------------
+              except Exception as e:
+
+                  print(
+                      "Request error:",
+                      lat,
+                      lon,
+                      str(e)
+                  )
+
+          # ============================================================
           # خروجی
-          # -----------------------------------------
+          # ============================================================
 
           output = {
-              "date": gregorian_date,
-              "date_shamsi": shamsi_date,
-              "variable": "fwi",
+
+              "forecast_date_gregorian":
+                  forecast_date.isoformat(),
+
+              "forecast_date_shamsi":
+                  forecast_shamsi,
+
+              "generated_at_iran":
+                  now_iran.strftime(
+                      "%Y-%m-%d %H:%M"
+                  ),
+
+              "variable":
+                  "fwinx",
+
               "source":
-                  "Copernicus GWIS / ECMWF Fire Danger Forecast",
+                  "Copernicus CEMS Fire Weather Index",
+
               "region":
                   "Fars Province, Iran",
-              "forecast":
-                  "tomorrow",
-              "points": points
+
+              "points":
+                  results
           }
+
+          # ============================================================
+          # ذخیره
+          # ============================================================
+
+          import os
+
+          os.makedirs(
+              "data",
+              exist_ok=True
+          )
 
           with open(
               OUTPUT_FILE,
@@ -358,30 +394,34 @@ jobs:
                   indent=2
               )
 
+          # ============================================================
+          # گزارش
+          # ============================================================
+
           print("================================")
-          print("FWI FARS RESULT")
+          print("FWI RESULT")
           print("================================")
 
           print(
               "Forecast Gregorian:",
-              gregorian_date
+              forecast_date.isoformat()
           )
 
           print(
               "Forecast Shamsi:",
-              shamsi_date
+              forecast_shamsi
           )
 
           print(
-              "Number of values:",
-              len(points)
+              "Number of FWI points:",
+              len(results)
           )
 
-          if points:
+          if results:
 
               values = [
                   p["fwi"]
-                  for p in points
+                  for p in results
               ]
 
               print(
@@ -397,8 +437,7 @@ jobs:
               print(
                   "Mean FWI:",
                   round(
-                      sum(values) /
-                      len(values),
+                      sum(values) / len(values),
                       3
                   )
               )
@@ -409,26 +448,40 @@ jobs:
           )
 
           print("================================")
+
           PY
 
-          python extract_fwi.py
+          python request_fwi.py
 
       - name: Show result
         run: |
+
           echo "========== FWI FARS =========="
+
           cat data/fwi_fars.json
+
           echo "=============================="
 
       - name: Save FWI
         run: |
+
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/fwi_fars.json
 
           if git diff --cached --quiet; then
+
             echo "No changes to commit."
+
           else
-            git commit -m "Update FWI forecast for tomorrow"
+
+            git commit \
+              -m "Update FWI Fars forecast"
+
             git push
+
           fi
+```
