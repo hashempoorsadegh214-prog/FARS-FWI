@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes
+          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes numpy
 
       - name: Download FWI
         env:
@@ -69,14 +69,26 @@ jobs:
           import numpy as np
           import xarray as xr
 
+          file = "data/fwi_fars.grib"
+
           ds = xr.open_dataset(
-              "data/fwi_fars.grib",
+              file,
               engine="cfgrib",
-              backend_kwargs={"indexpath": ""}
+              backend_kwargs={
+                  "indexpath": ""
+              }
           )
 
+          print("Variables:", list(ds.data_vars))
+          print("Dimensions:", dict(ds.sizes))
+
           da = ds["fwinx"]
-          data = np.asarray(da.values)
+
+          print("FWI dimensions:", da.dims)
+          print("FWI shape:", da.shape)
+          print("FWI value:", da.values)
+
+          value = np.asarray(da.values).squeeze()
 
           output = {
               "date": "2025-08-20",
@@ -85,35 +97,64 @@ jobs:
               "points": []
           }
 
-          if data.ndim == 0:
+          if value.ndim == 0:
               output["points"].append({
-                  "fwi": float(data)
+                  "fwi": float(value)
               })
 
+          elif value.ndim == 1:
+              for i, v in enumerate(value):
+                  if np.isfinite(v):
+                      output["points"].append({
+                          "index": i,
+                          "fwi": float(v)
+                      })
+
+          elif value.ndim == 2:
+              lats = np.asarray(da.latitude.values)
+              lons = np.asarray(da.longitude.values)
+
+              for i, lat in enumerate(lats):
+                  for j, lon in enumerate(lons):
+                      v = value[i, j]
+
+                      if np.isfinite(v):
+                          output["points"].append({
+                              "lat": float(lat),
+                              "lon": float(lon),
+                              "fwi": float(v)
+                          })
+
           else:
-              data = np.squeeze(data)
-              lats = np.asarray(da["latitude"].values)
-              lons = np.asarray(da["longitude"].values)
+              raise RuntimeError(
+                  f"Unexpected FWI dimensions: {value.ndim}"
+              )
 
-              if data.ndim == 2:
-                  for i, lat in enumerate(lats):
-                      for j, lon in enumerate(lons):
-                          value = data[i, j]
+          with open(
+              "data/fwi.json",
+              "w",
+              encoding="utf-8"
+          ) as f:
+              json.dump(
+                  output,
+                  f,
+                  ensure_ascii=False,
+                  indent=2
+              )
 
-                          if np.isfinite(value):
-                              output["points"].append({
-                                  "lat": float(lat),
-                                  "lon": float(lon),
-                                  "fwi": float(value)
-                              })
-
-          with open("data/fwi.json", "w", encoding="utf-8") as f:
-              json.dump(output, f, ensure_ascii=False, indent=2)
+          print("Number of FWI values:", len(output["points"]))
+          print("Created data/fwi.json")
           PY
 
           python extract_fwi.py
 
-      - name: Save FWI JSON
+      - name: Show result
+        run: |
+          echo "========== FWI RESULT =========="
+          cat data/fwi.json
+          echo "================================"
+
+      - name: Save JSON to repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
