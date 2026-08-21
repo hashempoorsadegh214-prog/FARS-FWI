@@ -3,37 +3,31 @@ import re
 
 JS_URL = "https://forest-fire.emergency.copernicus.eu/apps/gwis_current_situation/static/js/app.bundle-2.11.4.js"
 
-print("=" * 60)
-print("SEARCHING EFFIS VIEWER JAVASCRIPT")
-print("=" * 60)
-
 response = requests.get(JS_URL, timeout=120)
 
-print("HTTP:", response.status_code)
-print("SIZE:", len(response.text))
+print("=" * 60)
+print("SEARCH FWI CONFIG")
+print("=" * 60)
 
 js = response.text
 
-keywords = [
-    "fdf_sources",
-    "fdf_indexes",
-    "selectedSource",
-    "selectedIndex",
-    "ecmwf",
-    "mf010",
-    "fire danger",
-    "forecast"
+patterns = [
+    r"ecmwf_indexes",
+    r"fdf\s*:",
+    r"fdf\s*=",
+    r"sources\s*:",
+    r"widgets\s*:",
 ]
 
-for keyword in keywords:
+for pattern in patterns:
 
     print("=" * 60)
-    print("KEYWORD:", keyword)
+    print("SEARCH:", pattern)
     print("=" * 60)
 
     matches = list(
         re.finditer(
-            re.escape(keyword),
+            pattern,
             js,
             re.IGNORECASE
         )
@@ -41,17 +35,10 @@ for keyword in keywords:
 
     print("FOUND:", len(matches))
 
-    for match in matches[:10]:
+    for match in matches[:5]:
 
-        start = max(
-            0,
-            match.start() - 500
-        )
-
-        end = min(
-            len(js),
-            match.end() + 1000
-        )
+        start = max(0, match.start() - 1000)
+        end = min(len(js), match.end() + 2500)
 
         print(js[start:end])
         print()
