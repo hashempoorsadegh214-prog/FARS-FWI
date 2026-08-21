@@ -18,9 +18,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install CDS API
         run: |
-          pip install cdsapi
+          pip install "cdsapi>=0.7.7"
 
       - name: Download FWI
         env:
@@ -37,22 +37,29 @@ jobs:
               key=os.environ["EWDS_API_KEY"]
           )
 
+          dataset = "cems-fire-historical-v1"
+
           request = {
               "product_type": "reanalysis",
-              "variable": ["fire_weather_index"],
+              "variable": "fire_weather_index",
               "dataset_type": "consolidated_dataset",
-              "system_version": ["4_1"],
-              "year": ["2025"],
-              "month": ["08"],
-              "day": ["20"],
-              "data_format": "netcdf"
+              "system_version": "4_1",
+              "year": "2025",
+              "month": "08",
+              "day": "20",
+              "grid": "original_grid",
+              "data_format": "grib"
           }
 
           client.retrieve(
-              "cems-fire-historical-v1",
+              dataset,
               request,
-              "data/fwi_fars.nc"
+              "data/fwi_fars.grib"
           )
           PY
 
           python request_fwi.py
+
+      - name: Check downloaded file
+        run: |
+          ls -lh data/fwi_fars.grib
