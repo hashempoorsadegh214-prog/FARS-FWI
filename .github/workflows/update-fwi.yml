@@ -14,57 +14,91 @@ jobs:
 
     steps:
 
-      # ==========================================
-      # 1. دریافت پروژه
-      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ==========================================
-      # 2. Python
-      # ==========================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # ==========================================
-      # 3. نصب ابزارها
-      # ==========================================
+      - name: Test GWIS GetFeatureInfo
+        run: |
+          python - <<'PY'
+          import requests
+
+          URL = "https://maps.effis.emergency.copernicus.eu/gwis"
+
+          params = {
+              "SERVICE": "WMS",
+              "VERSION": "1.1.1",
+              "REQUEST": "GetFeatureInfo",
+              "LAYERS": "ecmwf.fwi",
+              "QUERY_LAYERS": "ecmwf.fwi",
+              "STYLES": "",
+              "SRS": "EPSG:4326",
+              "BBOX": "52.57,29.58,52.60,29.61",
+              "WIDTH": "100",
+              "HEIGHT": "100",
+              "X": "50",
+              "Y": "50",
+              "INFO_FORMAT": "text/plain",
+              "TIME": "2026-08-22"
+          }
+
+          print("================================")
+          print("GWIS GETFEATUREINFO TEST")
+          print("================================")
+          print("Point: 52.5837, 29.5918")
+          print("Date: 2026-08-22")
+          print("Layer: ecmwf.fwi")
+          print("================================")
+
+          response = requests.get(
+              URL,
+              params=params,
+              timeout=120
+          )
+
+          print("HTTP:", response.status_code)
+          print(
+              "Content-Type:",
+              response.headers.get("Content-Type")
+          )
+
+          print("================================")
+          print("GWIS RESPONSE")
+          print("================================")
+
+          print(response.text[:5000])
+
+          print("================================")
+          PY
+
       - name: Install dependencies
         run: |
-          pip install requests
+          pip install requests pillow numpy
 
-      # ==========================================
-      # 4. دریافت FWI فردا از GWIS
-      # ==========================================
       - name: Download FWI Forecast
         run: |
-
           mkdir -p data
 
           cat > request_fwi.py <<'PY'
           import requests
           import json
-          import math
           from datetime import datetime, timedelta, timezone
 
-          # ==========================================
-          # زمان ایران
-          # ==========================================
-
-          IRAN_TZ = timezone(timedelta(hours=3, minutes=30))
-
-          now = datetime.now(IRAN_TZ)
-
-          # هشدار برای فردا
+          iran_tz = timezone(timedelta(hours=3, minutes=30))
+          now = datetime.now(iran_tz)
           target = now.date() + timedelta(days=1)
 
           target_date = target.strftime("%Y-%m-%d")
 
-          # ==========================================
-          # تبدیل میلادی به شمسی
-          # ==========================================
+          print("================================")
+          print("FWI FORECAST")
+          print("================================")
+          print("Iran current date:", now.strftime("%Y-%m-%d %H:%M"))
+          print("Forecast Gregorian:", target_date)
 
           def gregorian_to_jalali(gy, gm, gd):
 
@@ -120,7 +154,6 @@ jobs:
 
               return jy, jm, jd
 
-
           jy, jm, jd = gregorian_to_jalali(
               target.year,
               target.month,
@@ -129,391 +162,107 @@ jobs:
 
           shamsi_date = f"{jy:04d}-{jm:02d}-{jd:02d}"
 
-          print("================================")
-          print("FWI FORECAST")
-          print("================================")
-          print(
-              "Iran current date:",
-              now.strftime("%Y-%m-%d %H:%M")
-          )
-          print(
-              "Forecast Gregorian:",
-              target_date
-          )
-          print(
-              "Forecast Shamsi:",
-              shamsi_date
-          )
+          print("Forecast Shamsi:", shamsi_date)
           print("================================")
 
-
-          # ==========================================
-          # GWIS WMS
-          # ==========================================
-
-          BASE_URL = (
-              "https://maps.effis.emergency.copernicus.eu/gwis"
-          )
-
-          # محدوده استان فارس
-          WEST = 50.0
-          SOUTH = 27.0
-          EAST = 55.0
-          NORTH = 32.0
-
-          # ==========================================
-          # شبکه نقاط
-          #
-          # فاصله حدود 0.25 درجه
-          # ==========================================
-
-          latitudes = []
-
-          lat = SOUTH
-
-          while lat <= NORTH + 0.000001:
-
-              latitudes.append(
-                  round(lat, 6)
-              )
-
-              lat += 0.25
-
-
-          longitudes = []
-
-          lon = WEST
-
-          while lon <= EAST + 0.000001:
-
-              longitudes.append(
-                  round(lon, 6)
-              )
-
-              lon += 0.25
-
-
-          # ==========================================
-          # دریافت مقدار عددی FWI
-          # ==========================================
-
-          points = []
-
-          print("Requesting numeric FWI values...")
-          print("Target:", target_date)
-
-          for lat in latitudes:
-
-              for lon in longitudes:
-
-                  print(
-                      f"POINT {lat},{lon}:",
-                      end=" "
-                  )
-
-                  params = {
-                      "SERVICE": "WMS",
-                      "VERSION": "1.1.1",
-                      "REQUEST": "GetFeatureInfo",
-
-                      # لایه FWI
-                      "LAYERS": "ecmwf.fwi",
-                      "QUERY_LAYERS": "ecmwf.fwi",
-
-                      "STYLES": "",
-
-                      "SRS": "EPSG:4326",
-
-                      "BBOX": (
-                          f"{lon - 0.125},"
-                          f"{lat - 0.125},"
-                          f"{lon + 0.125},"
-                          f"{lat + 0.125}"
-                      ),
-
-                      "WIDTH": "1",
-                      "HEIGHT": "1",
-
-                      "X": "0",
-                      "Y": "0",
-
-                      "INFO_FORMAT": "text/plain",
-
-                      "FEATURE_COUNT": "1",
-
-                      "TIME": target_date
-                  }
-
-                  try:
-
-                      response = requests.get(
-                          BASE_URL,
-                          params=params,
-                          timeout=30
-                      )
-
-                      text = response.text.strip()
-
-                      print(
-                          response.status_code,
-                          response.headers.get(
-                              "Content-Type",
-                              ""
-                          )
-                      )
-
-                      if response.status_code != 200:
-                          continue
-
-                      # اگر سرویس خطا برگرداند
-                      if (
-                          "ServiceException" in text
-                          or "LayerNotDefined" in text
-                      ):
-                          continue
-
-                      # ==================================
-                      # استخراج عدد
-                      # ==================================
-
-                      value = None
-
-                      for line in text.splitlines():
-
-                          line = line.strip()
-
-                          if not line:
-                              continue
-
-                          # حذف متن‌های رایج
-                          clean = (
-                              line
-                              .replace(
-                                  "fwinx",
-                                  ""
-                              )
-                              .replace(
-                                  "FWI",
-                                  ""
-                              )
-                              .replace(
-                                  "=",
-                                  " "
-                              )
-                              .replace(
-                                  ":",
-                                  " "
-                              )
-                          )
-
-                          for token in clean.split():
-
-                              try:
-
-                                  number = float(token)
-
-                                  if (
-                                      math.isfinite(number)
-                                      and
-                                      0 <= number <= 200
-                                  ):
-
-                                      value = number
-                                      break
-
-                              except ValueError:
-                                  pass
-
-                          if value is not None:
-                              break
-
-                      if value is None:
-                          continue
-
-                      points.append({
-                          "lat": lat,
-                          "lon": lon,
-                          "fwi": round(
-                              float(value),
-                              3
-                          )
-                      })
-
-                  except Exception as e:
-
-                      print(
-                          "Request error:",
-                          str(e)
-                      )
-
-          # ==========================================
-          # نتیجه
-          # ==========================================
-
-          values = [
-              p["fwi"]
-              for p in points
-          ]
-
-          print()
-          print("================================")
-          print("FWI FORECAST RESULT")
-          print("================================")
-          print(
-              "Forecast:",
-              target_date
-          )
-          print(
-              "Shamsi:",
-              shamsi_date
-          )
-          print(
-              "Valid numeric points:",
-              len(points)
-          )
-
-          if values:
-
-              print(
-                  "Minimum:",
-                  min(values)
-              )
-
-              print(
-                  "Maximum:",
-                  max(values)
-              )
-
-              print(
-                  "Mean:",
-                  round(
-                      sum(values) / len(values),
-                      3
-                  )
-              )
-
-          else:
-
-              print("Minimum: None")
-              print("Maximum: None")
-              print("Mean: None")
-
-          print("================================")
-
-
-          # ==========================================
-          # اگر هیچ مقدار عددی دریافت نشد
-          # ==========================================
-
-          if not points:
-
-              raise RuntimeError(
-                  "No valid numeric FWI values were returned by GWIS."
-              )
-
-
-          # ==========================================
-          # ساخت خروجی
-          # ==========================================
-
-          output = {
-
-              "forecast_gregorian":
-                  target_date,
-
-              "forecast_shamsi":
-                  shamsi_date,
-
-              "generated_at_iran":
-                  now.strftime(
-                      "%Y-%m-%d %H:%M"
-                  ),
-
-              "source":
-                  "Copernicus GWIS / ECMWF",
-
-              "layer":
-                  "ecmwf.fwi",
-
-              "region":
-                  "Fars Province, Iran",
-
-              "bbox": [
-                  WEST,
-                  SOUTH,
-                  EAST,
-                  NORTH
-              ],
-
-              "points":
-                  points
+          url = "https://maps.effis.emergency.copernicus.eu/gwis"
+
+          params = {
+              "SERVICE": "WMS",
+              "VERSION": "1.1.1",
+              "REQUEST": "GetFeatureInfo",
+              "LAYERS": "ecmwf.fwi",
+              "QUERY_LAYERS": "ecmwf.fwi",
+              "STYLES": "",
+              "SRS": "EPSG:4326",
+              "BBOX": "52.57,29.58,52.60,29.61",
+              "WIDTH": "100",
+              "HEIGHT": "100",
+              "X": "50",
+              "Y": "50",
+              "INFO_FORMAT": "text/plain",
+              "TIME": target_date
           }
 
+          print("Requesting GWIS...")
+          print("Layer:", params["LAYERS"])
+          print("Time:", target_date)
+
+          response = requests.get(
+              url,
+              params=params,
+              timeout=120
+          )
+
+          print("HTTP status:", response.status_code)
+          print(
+              "Content-Type:",
+              response.headers.get("Content-Type")
+          )
+
+          print("================================")
+          print("GWIS RESPONSE")
+          print("================================")
+          print(response.text[:5000])
+          print("================================")
+
+          if response.status_code != 200:
+              raise RuntimeError(
+                  f"GWIS HTTP error: {response.status_code}"
+              )
 
           with open(
               "data/fwi.json",
               "w",
               encoding="utf-8"
           ) as f:
-
               json.dump(
-                  output,
+                  {
+                      "forecast_gregorian": target_date,
+                      "forecast_shamsi": shamsi_date,
+                      "generated_at_iran":
+                          now.strftime("%Y-%m-%d %H:%M"),
+                      "source":
+                          "Copernicus GWIS / ECMWF",
+                      "layer":
+                          "ecmwf.fwi",
+                      "region":
+                          "Fars Province, Iran",
+                      "test_point": {
+                          "lat": 29.5918,
+                          "lon": 52.5837
+                      },
+                      "raw_response":
+                          response.text[:5000]
+                  },
                   f,
                   ensure_ascii=False,
                   indent=2
               )
 
-
-          print()
-          print("FWI JSON created successfully.")
-          print(
-              "Output:",
-              "data/fwi.json"
-          )
-
+          print("FWI test saved.")
           PY
 
           python request_fwi.py
 
-
-      # ==========================================
-      # 5. نمایش نتیجه
-      # ==========================================
       - name: Show result
         run: |
-
           echo "=============================="
           echo "FWI FORECAST"
           echo "=============================="
-
           cat data/fwi.json
-
           echo "=============================="
 
-
-      # ==========================================
-      # 6. ذخیره در GitHub
-      # ==========================================
       - name: Save FWI
         run: |
-
-          git config user.name \
-            "github-actions[bot]"
-
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/fwi.json
 
           if git diff --cached --quiet; then
-
             echo "No changes to commit."
-
           else
-
-            git commit \
-              -m "Update FWI forecast"
-
+            git commit -m "Test FWI GetFeatureInfo"
             git push
-
           fi
