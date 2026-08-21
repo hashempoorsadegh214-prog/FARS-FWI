@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes numpy
+          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes numpy geopandas shapely
 
       - name: Download FWI
         env:
@@ -62,21 +62,25 @@ jobs:
 
           python request_fwi.py
 
-      - name: Extract FWI
+      - name: Extract FWI for Fars
         run: |
           cat > extract_fwi.py <<'PY'
           import json
           import numpy as np
           import xarray as xr
+          import geopandas as gpd
+          from shapely.geometry import Point
 
-          file = "data/fwi_fars.grib"
+          GRIB_FILE = "data/fwi_fars.grib"
+          BOUNDARY_FILE = "fars.geojson"
+          OUTPUT_FILE = "data/fwi_fars.json"
+
+          print("Reading FWI...")
 
           ds = xr.open_dataset(
-              file,
+              GRIB_FILE,
               engine="cfgrib",
-              backend_kwargs={
-                  "indexpath": ""
-              }
+              backend_kwargs={"indexpath": ""}
           )
 
           print("Variables:", list(ds.data_vars))
@@ -84,54 +88,70 @@ jobs:
 
           da = ds["fwinx"]
 
-          print("FWI dimensions:", da.dims)
-          print("FWI shape:", da.shape)
-          print("FWI value:", da.values)
+          values = np.asarray(da.values).squeeze()
 
-          value = np.asarray(da.values).squeeze()
+          print("FWI shape:", values.shape)
+          print("FWI dimensions:", da.dims)
+
+          # پیدا کردن نام مختصات
+          lat_name = "latitude"
+          lon_name = "longitude"
+
+          latitudes = np.asarray(da[lat_name].values)
+          longitudes = np.asarray(da[lon_name].values)
+
+          # اطمینان از دوبعدی بودن شبکه
+          if values.ndim != 2:
+              raise RuntimeError(
+                  f"Unexpected FWI shape: {values.shape}"
+              )
+
+          print("Reading Fars boundary...")
+
+          fars = gpd.read_file(BOUNDARY_FILE)
+
+          if fars.crs is None:
+              fars = fars.set_crs("EPSG:4326")
+          else:
+              fars = fars.to_crs("EPSG:4326")
+
+          fars_geometry = fars.geometry.union_all()
+
+          points = []
+
+          print("Selecting grid cells inside Fars...")
+
+          for i, lat in enumerate(latitudes):
+              for j, lon in enumerate(longitudes):
+
+                  value = values[i, j]
+
+                  if not np.isfinite(value):
+                      continue
+
+                  point = Point(
+                      float(lon),
+                      float(lat)
+                  )
+
+                  if fars_geometry.contains(point):
+
+                      points.append({
+                          "lat": round(float(lat), 6),
+                          "lon": round(float(lon), 6),
+                          "fwi": round(float(value), 3)
+                      })
 
           output = {
               "date": "2025-08-20",
               "variable": "fwinx",
               "source": "Copernicus CEMS Fire Weather Index",
-              "points": []
+              "region": "Fars Province, Iran",
+              "points": points
           }
 
-          if value.ndim == 0:
-              output["points"].append({
-                  "fwi": float(value)
-              })
-
-          elif value.ndim == 1:
-              for i, v in enumerate(value):
-                  if np.isfinite(v):
-                      output["points"].append({
-                          "index": i,
-                          "fwi": float(v)
-                      })
-
-          elif value.ndim == 2:
-              lats = np.asarray(da.latitude.values)
-              lons = np.asarray(da.longitude.values)
-
-              for i, lat in enumerate(lats):
-                  for j, lon in enumerate(lons):
-                      v = value[i, j]
-
-                      if np.isfinite(v):
-                          output["points"].append({
-                              "lat": float(lat),
-                              "lon": float(lon),
-                              "fwi": float(v)
-                          })
-
-          else:
-              raise RuntimeError(
-                  f"Unexpected FWI dimensions: {value.ndim}"
-              )
-
           with open(
-              "data/fwi.json",
+              OUTPUT_FILE,
               "w",
               encoding="utf-8"
           ) as f:
@@ -142,28 +162,46 @@ jobs:
                   indent=2
               )
 
-          print("Number of FWI values:", len(output["points"]))
-          print("Created data/fwi.json")
+          print("================================")
+          print("FWI FARS RESULT")
+          print("================================")
+          print("Points inside Fars:", len(points))
+
+          if points:
+              fwi_values = [p["fwi"] for p in points]
+
+              print("Minimum FWI:", min(fwi_values))
+              print("Maximum FWI:", max(fwi_values))
+              print(
+                  "Mean FWI:",
+                  round(
+                      sum(fwi_values) / len(fwi_values),
+                      3
+                  )
+              )
+
+          print("Output:", OUTPUT_FILE)
+          print("================================")
           PY
 
           python extract_fwi.py
 
       - name: Show result
         run: |
-          echo "========== FWI RESULT =========="
-          cat data/fwi.json
-          echo "================================"
+          echo "========== FWI FARS =========="
+          cat data/fwi_fars.json
+          echo "=============================="
 
-      - name: Save JSON to repository
+      - name: Save FWI to repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add data/fwi.json
+          git add data/fwi_fars.json
 
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Update FWI data"
+            git commit -m "Update FWI Fars"
             git push
           fi
