@@ -1,4 +1,4 @@
-```yaml
+
 name: Update FWI Fars
 
 on:
@@ -752,4 +752,3 @@ jobs:
             git push
 
           fi
-```
