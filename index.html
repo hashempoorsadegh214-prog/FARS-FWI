@@ -1,624 +1,1239 @@
-name: Update FWI Fars
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "30 1 * * *"
+  <title>سامانه پیش‌بینی وقوع حریق‌های احتمالی در عرصه‌های طبیعی استان فارس</title>
 
-permissions:
-  contents: write
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
 
-jobs:
-  update-fwi:
-    runs-on: ubuntu-latest
+  <style>
+    * {
+      box-sizing: border-box;
+    }
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    :root {
+      --panel: rgba(255,255,255,.96);
+      --text: #20252b;
+      --muted: #6b7280;
+      --border: rgba(0,0,0,.10);
+      --shadow: 0 8px 28px rgba(0,0,0,.16);
+      --accent: #c45b18;
+    }
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    body.dark {
+      --panel: rgba(25,30,38,.96);
+      --text: #f4f4f4;
+      --muted: #c0c6ce;
+      --border: rgba(255,255,255,.12);
+      --shadow: 0 8px 28px rgba(0,0,0,.42);
+      --accent: #ff9c52;
+    }
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install requests beautifulsoup4 geopandas shapely
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: "B Nazanin", Tahoma, Arial, sans-serif;
+      color: var(--text);
+    }
 
-      - name: Get FWI forecast
-        run: |
-          mkdir -p data
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
 
-          cat > request_fwi.py <<'PY'
-          import json
-          import math
-          import requests
-          import geopandas as gpd
+    .panel {
+      position: absolute;
+      z-index: 1200;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
 
-          from bs4 import BeautifulSoup
-          from shapely.geometry import Point
-          from datetime import datetime, timedelta, timezone
+    .header {
+      top: 12px;
+      right: 12px;
+      width: min(610px, calc(100vw - 24px));
+      padding: 15px 17px;
+    }
 
-          WMS_URL = "https://maps.effis.emergency.copernicus.eu/gwis"
+    .main-title {
+      font-size: 22px;
+      font-weight: bold;
+      line-height: 1.5;
+    }
 
-          LAYER = "ecmwf.query"
-          QUERY_LAYER = "ecmwf.query"
+    .subtitle {
+      margin-top: 3px;
+      color: var(--accent);
+      font-size: 16px;
+      font-weight: bold;
+    }
 
-          BBOX = [50.0, 27.0, 55.0, 32.0]
+    .date {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
 
-          # شبکه متراکم‌تر
-          GRID_STEP = 0.05
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 11px;
+    }
 
-          POINT_WIDTH = 101
-          POINT_HEIGHT = 101
+    button,
+    select {
+      font-family: inherit;
+    }
 
-          HALF_SIZE_METERS = 12000
+    .btn,
+    .select {
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 9px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
 
-          OUTPUT_FILE = "data/fwi_fars.json"
+    .btn:hover {
+      border-color: var(--accent);
+    }
 
-          IRAN_TZ = timezone(
-              timedelta(hours=3, minutes=30)
+    .filter {
+      top: 12px;
+      left: 12px;
+      width: 290px;
+      padding: 14px;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      font-weight: bold;
+      margin-bottom: 9px;
+    }
+
+    .filter label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .select {
+      width: 100%;
+    }
+
+    .filter-status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .stats {
+      right: 12px;
+      bottom: 12px;
+      width: 255px;
+      padding: 13px;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      line-height: 1.9;
+      font-size: 13px;
+    }
+
+    .stat span {
+      color: var(--muted);
+    }
+
+    .legend {
+      left: 12px;
+      bottom: 12px;
+      width: 225px;
+      padding: 12px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      line-height: 1.9;
+    }
+
+    .color {
+      width: 15px;
+      height: 15px;
+      border-radius: 4px;
+      flex: 0 0 15px;
+    }
+
+    .about {
+      display: none;
+      top: 125px;
+      right: 12px;
+      width: min(580px, calc(100vw - 24px));
+      max-height: calc(100vh - 145px);
+      overflow-y: auto;
+      padding: 18px;
+    }
+
+    .about h3 {
+      margin: 0 0 10px;
+      color: var(--accent);
+    }
+
+    .about p {
+      margin: 8px 0;
+      font-size: 13px;
+      line-height: 2;
+    }
+
+    .close {
+      float: left;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 22px;
+      cursor: pointer;
+    }
+
+    .loading {
+      position: absolute;
+      z-index: 2000;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 14px 20px;
+      font-size: 14px;
+    }
+
+    .leaflet-popup-content {
+      font-family: "B Nazanin", Tahoma, Arial, sans-serif;
+      direction: rtl;
+      text-align: right;
+    }
+
+    @media (max-width: 760px) {
+      .header {
+        top: 8px;
+        right: 8px;
+        width: calc(100vw - 16px);
+      }
+
+      .filter {
+        left: 8px;
+        bottom: 170px;
+        top: auto;
+        width: calc(100vw - 16px);
+      }
+
+      .stats {
+        right: 8px;
+        bottom: 8px;
+        width: 205px;
+      }
+
+      .legend {
+        left: 8px;
+        bottom: 8px;
+        width: 175px;
+      }
+
+      .main-title {
+        font-size: 17px;
+      }
+
+      .subtitle {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="map"></div>
+
+  <div class="panel header">
+
+    <div class="main-title">
+      سامانه پیش‌بینی وقوع حریق‌های احتمالی در عرصه‌های طبیعی استان فارس
+    </div>
+
+    <div class="subtitle">
+      شاخص خطر آتش‌سوزی جنگل و مرتع (FWI)
+    </div>
+
+    <div class="date" id="dateLine">
+      در حال دریافت تاریخ پیش‌بینی...
+    </div>
+
+    <div class="buttons">
+      <button class="btn" id="themeBtn">
+        ☀️ / 🌙 حالت روز و شب
+      </button>
+
+      <button class="btn" id="aboutBtn">
+        معرفی سامانه
+      </button>
+    </div>
+
+  </div>
+
+  <div class="panel filter">
+
+    <div class="panel-title">
+      فیلتر مکانی
+    </div>
+
+    <label for="locationFilter">
+      محدوده مورد نظر
+    </label>
+
+    <select id="locationFilter" class="select">
+      <option value="all">کل استان فارس</option>
+      <option value="protected">مناطق حفاظت‌شده</option>
+      <option value="hunting">مناطق ممنوعه شکار</option>
+    </select>
+
+    <div class="filter-status" id="filterStatus">
+      در حال بارگذاری...
+    </div>
+
+  </div>
+
+  <div class="panel about" id="aboutPanel">
+
+    <button class="close" id="aboutClose">×</button>
+
+    <h3>معرفی سامانه</h3>
+
+    <p>
+      این سامانه با هدف پایش و پیش‌بینی شرایط مساعد برای وقوع و گسترش
+      حریق‌های احتمالی در عرصه‌های طبیعی استان فارس طراحی شده است.
+    </p>
+
+    <p>
+      مبنای اصلی سامانه، شاخص <strong>FWI</strong> یا
+      «شاخص هواشناسی خطر آتش‌سوزی» است. این شاخص شرایط جوی مؤثر بر
+      خشکی سوخت‌های طبیعی و آمادگی آن‌ها برای گسترش آتش را در قالب
+      یک مقدار عددی بیان می‌کند.
+    </p>
+
+    <p>
+      داده‌های پیش‌بینی مورد استفاده سامانه از
+      <strong>Copernicus EFFIS</strong> دریافت می‌شود و برای پیش‌بینی
+      FWI از داده‌های مدل هواشناسی <strong>ECMWF</strong> استفاده می‌شود.
+      خروجی دریافت‌شده برای نقاط واقع در استان فارس پردازش و در نقشه
+      نمایش داده می‌شود.
+    </p>
+
+    <p>
+      مقدار بالاتر FWI نشان‌دهنده مساعدتر بودن شرایط برای شکل‌گیری و
+      گسترش آتش است. این شاخص به معنی پیش‌بینی قطعی وقوع آتش نیست؛
+      بلکه یک ابزار هشدار و ارزیابی خطر است که می‌تواند در کنار
+      پوشش گیاهی، وضعیت سوخت، توپوگرافی و سایر اطلاعات محیطی استفاده شود.
+    </p>
+
+    <p>
+      در این سامانه، وضعیت خطر به شش طبقه «کم»، «متوسط»، «زیاد»،
+      «خیلی زیاد»، «شدید» و «بسیار شدید» تقسیم شده است.
+    </p>
+
+  </div>
+
+  <div class="panel stats">
+
+    <div class="panel-title">
+      آمار محدوده انتخاب‌شده
+    </div>
+
+    <div class="stat">
+      <span>تعداد نقاط</span>
+      <strong id="statCount">-</strong>
+    </div>
+
+    <div class="stat">
+      <span>حداقل FWI</span>
+      <strong id="statMin">-</strong>
+    </div>
+
+    <div class="stat">
+      <span>حداکثر FWI</span>
+      <strong id="statMax">-</strong>
+    </div>
+
+    <div class="stat">
+      <span>میانگین FWI</span>
+      <strong id="statMean">-</strong>
+    </div>
+
+  </div>
+
+  <div class="panel legend">
+
+    <div class="panel-title">
+      طبقات خطر FWI
+    </div>
+
+    <div class="legend-row">
+      <span class="color" style="background:#2ecc71"></span>
+      کم: کمتر از 11.2
+    </div>
+
+    <div class="legend-row">
+      <span class="color" style="background:#f1c40f"></span>
+      متوسط: 11.2 تا 21.3
+    </div>
+
+    <div class="legend-row">
+      <span class="color" style="background:#e67e22"></span>
+      زیاد: 21.3 تا 38
+    </div>
+
+    <div class="legend-row">
+      <span class="color" style="background:#e74c3c"></span>
+      خیلی زیاد: 38 تا 50
+    </div>
+
+    <div class="legend-row">
+      <span class="color" style="background:#8e44ad"></span>
+      شدید: 50 تا 70
+    </div>
+
+    <div class="legend-row">
+      <span class="color" style="background:#4a235a"></span>
+      بسیار شدید: بیشتر از 70
+    </div>
+
+  </div>
+
+  <div class="loading" id="loading">
+    در حال دریافت داده‌های سامانه...
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+
+    // =====================================================
+    // نقشه
+    // =====================================================
+
+    const map = L.map("map").setView(
+      [29.6, 52.5],
+      7
+    );
+
+
+    // =====================================================
+    // نقشه روز و شب
+    // =====================================================
+
+    const dayLayer = L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap"
+      }
+    );
+
+    const nightLayer = L.tileLayer(
+      "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap &copy; CARTO"
+      }
+    );
+
+    dayLayer.addTo(map);
+
+
+    // =====================================================
+    // متغیرهای داده
+    // =====================================================
+
+    let fwiData = null;
+    let farsData = null;
+    let protectedData = null;
+    let huntingData = null;
+
+    let markers = [];
+    let currentFilter = "all";
+
+    let protectedLayer = null;
+    let huntingLayer = null;
+    let farsLayer = null;
+
+
+    // =====================================================
+    // رنگ FWI
+    // =====================================================
+
+    function fwiColor(value) {
+
+      if (value < 11.2) return "#2ecc71";
+      if (value < 21.3) return "#f1c40f";
+      if (value < 38) return "#e67e22";
+      if (value < 50) return "#e74c3c";
+      if (value <= 70) return "#8e44ad";
+
+      return "#4a235a";
+    }
+
+
+    // =====================================================
+    // کلاس FWI
+    // =====================================================
+
+    function fwiClass(value) {
+
+      if (value < 11.2) return "کم";
+      if (value < 21.3) return "متوسط";
+      if (value < 38) return "زیاد";
+      if (value < 50) return "خیلی زیاد";
+      if (value <= 70) return "شدید";
+
+      return "بسیار شدید";
+    }
+
+
+    // =====================================================
+    // تبدیل Feature به Geometry
+    // =====================================================
+
+    function pointInFeature(
+      lat,
+      lon,
+      feature
+    ) {
+
+      if (
+        !feature ||
+        !feature.geometry
+      ) {
+        return false;
+      }
+
+      return pointInGeometry(
+        lat,
+        lon,
+        feature.geometry
+      );
+    }
+
+
+    function pointInGeometry(
+      lat,
+      lon,
+      geometry
+    ) {
+
+      if (
+        geometry.type === "Polygon"
+      ) {
+
+        return polygonContains(
+          lat,
+          lon,
+          geometry.coordinates
+        );
+
+      }
+
+      if (
+        geometry.type === "MultiPolygon"
+      ) {
+
+        return geometry.coordinates.some(
+          polygon =>
+            polygonContains(
+              lat,
+              lon,
+              polygon
+            )
+        );
+
+      }
+
+      return false;
+    }
+
+
+    // =====================================================
+    // Point in Polygon
+    // =====================================================
+
+    function polygonContains(
+      lat,
+      lon,
+      coordinates
+    ) {
+
+      const ring = coordinates[0];
+
+      if (!ring || ring.length < 3) {
+        return false;
+      }
+
+      let inside = false;
+
+      for (
+        let i = 0, j = ring.length - 1;
+        i < ring.length;
+        j = i++
+      ) {
+
+        const xi = ring[i][0];
+        const yi = ring[i][1];
+
+        const xj = ring[j][0];
+        const yj = ring[j][1];
+
+        const intersects =
+          (
+            (yi > lat) !== (yj > lat)
+          ) &&
+          (
+            lon <
+            (
+              (xj - xi) *
+              (lat - yi) /
+              (yj - yi)
+            ) +
+            xi
+          );
+
+        if (intersects) {
+          inside = !inside;
+        }
+      }
+
+      return inside;
+    }
+
+
+    // =====================================================
+    // آیا نقطه داخل محدوده انتخابی است؟
+    // =====================================================
+
+    function matchesFilter(
+      lat,
+      lon
+    ) {
+
+      if (currentFilter === "all") {
+        return true;
+      }
+
+      const data =
+        currentFilter === "protected"
+          ? protectedData
+          : huntingData;
+
+      if (
+        !data ||
+        !data.features
+      ) {
+        return false;
+      }
+
+      return data.features.some(
+        feature =>
+          pointInFeature(
+            lat,
+            lon,
+            feature
           )
+      );
+    }
 
-          now = datetime.now(IRAN_TZ)
 
-          target = now.date() + timedelta(days=1)
+    // =====================================================
+    // پاک کردن نقاط
+    // =====================================================
 
-          target_date = target.strftime("%Y-%m-%d")
+    function clearMarkers() {
 
-          def gregorian_to_jalali(gy, gm, gd):
+      markers.forEach(
+        marker =>
+          map.removeLayer(marker)
+      );
 
-              g_days = [
-                  31, 28, 31, 30, 31, 30,
-                  31, 31, 30, 31, 30, 31
-              ]
+      markers = [];
+    }
 
-              if gy % 4 == 0 and (
-                  gy % 100 != 0
-                  or gy % 400 == 0
-              ):
-                  g_days[1] = 29
 
-              gy2 = gy - 1600
-              gm2 = gm - 1
-              gd2 = gd - 1
+    // =====================================================
+    // نمایش نقاط FWI
+    // =====================================================
 
-              g_day_no = (
-                  365 * gy2
-                  + (gy2 + 3) // 4
-                  - (gy2 + 99) // 100
-                  + (gy2 + 399) // 400
-              )
+    function renderFWI() {
 
-              for i in range(gm2):
-                  g_day_no += g_days[i]
+      clearMarkers();
 
-              g_day_no += gd2
+      if (
+        !fwiData ||
+        !Array.isArray(
+          fwiData.points
+        )
+      ) {
+        return;
+      }
 
-              j_day_no = g_day_no - 79
+      const visible =
+        fwiData.points.filter(
+          point => {
 
-              j_np = j_day_no // 12053
-              j_day_no %= 12053
+            const lat =
+              Number(point.lat);
 
-              jy = (
-                  979
-                  + 33 * j_np
-                  + 4 * (j_day_no // 1461)
-              )
+            const lon =
+              Number(point.lon);
 
-              j_day_no %= 1461
+            const value =
+              Number(point.fwi);
 
-              if j_day_no >= 366:
-                  jy += (j_day_no - 1) // 365
-                  j_day_no = (j_day_no - 1) % 365
+            if (
+              !Number.isFinite(lat) ||
+              !Number.isFinite(lon) ||
+              !Number.isFinite(value)
+            ) {
+              return false;
+            }
 
-              if j_day_no < 186:
-                  jm = 1 + j_day_no // 31
-                  jd = 1 + j_day_no % 31
-              else:
-                  jm = 7 + (j_day_no - 186) // 30
-                  jd = 1 + (j_day_no - 186) % 30
+            return matchesFilter(
+              lat,
+              lon
+            );
+          }
+        );
 
-              return jy, jm, jd
 
-          jy, jm, jd = gregorian_to_jalali(
-              target.year,
-              target.month,
-              target.day
-          )
+      visible.forEach(
+        point => {
 
-          shamsi_date = f"{jy:04d}-{jm:02d}-{jd:02d}"
+          const lat =
+            Number(point.lat);
 
-          print("================================")
-          print("FWI FORECAST")
-          print("================================")
-          print(
-              "Iran current date:",
-              now.strftime("%Y-%m-%d %H:%M")
-          )
-          print(
-              "Forecast Gregorian:",
-              target_date
-          )
-          print(
-              "Forecast Shamsi:",
-              shamsi_date
-          )
-          print(
-              "Grid step:",
-              GRID_STEP
-          )
-          print("================================")
+          const lon =
+            Number(point.lon);
 
-          def lonlat_to_3857(lon, lat):
+          const value =
+            Number(point.fwi);
 
-              x = (
-                  lon
-                  * 20037508.34
-                  / 180.0
-              )
 
-              y = math.log(
-                  math.tan(
-                      math.radians(lat) / 2.0
-                      + math.pi / 4.0
-                  )
-              )
-
-              y = (
-                  y
-                  * 20037508.34
-                  / math.pi
-              )
-
-              return x, y
-
-          def parse_fwi(html):
-
-              soup = BeautifulSoup(
-                  html,
-                  "html.parser"
-              )
-
-              rows = soup.find_all("tr")
-
-              values = []
-
-              for row in rows:
-
-                  cells = row.find_all("td")
-
-                  if len(cells) < 2:
-                      continue
-
-                  label = (
-                      cells[0]
-                      .get_text(
-                          " ",
-                          strip=True
-                      )
-                      .lower()
-                  )
-
-                  value_text = (
-                      cells[1]
-                      .get_text(
-                          " ",
-                          strip=True
-                      )
-                  )
-
-                  if "fire weather index" not in label:
-                      continue
-
-                  try:
-                      value = float(value_text)
-                  except ValueError:
-                      continue
-
-                  if (
-                      math.isfinite(value)
-                      and 0 <= value <= 200
-                  ):
-                      values.append(value)
-
-              if not values:
-                  return None
-
-              return round(values[0], 3)
-
-          session = requests.Session()
-
-          session.headers.update({
-              "User-Agent": "FARS-FWI/1.0"
-          })
-
-          def get_fwi(lon, lat):
-
-              x, y = lonlat_to_3857(
-                  lon,
-                  lat
-              )
-
-              minx = x - HALF_SIZE_METERS
-              maxx = x + HALF_SIZE_METERS
-              miny = y - HALF_SIZE_METERS
-              maxy = y + HALF_SIZE_METERS
-
-              bbox = (
-                  f"{minx},"
-                  f"{miny},"
-                  f"{maxx},"
-                  f"{maxy}"
-              )
-
-              params = {
-                  "SERVICE": "WMS",
-                  "VERSION": "1.1.1",
-                  "REQUEST": "GetFeatureInfo",
-                  "LAYERS": LAYER,
-                  "QUERY_LAYERS": QUERY_LAYER,
-                  "STYLES": "",
-                  "SRS": "EPSG:3857",
-                  "BBOX": bbox,
-                  "WIDTH": str(POINT_WIDTH),
-                  "HEIGHT": str(POINT_HEIGHT),
-                  "X": "50",
-                  "Y": "50",
-                  "INFO_FORMAT": "text/html",
-                  "FEATURE_COUNT": "1",
-                  "FORMAT": "image/png",
-                  "TRANSPARENT": "TRUE",
-                  "TIME": target_date
+          const marker =
+            L.circleMarker(
+              [lat, lon],
+              {
+                radius: 6,
+                color: "#ffffff",
+                weight: 1,
+                fillColor:
+                  fwiColor(value),
+                fillOpacity: 0.85
               }
+            ).addTo(map);
 
-              try:
-                  response = session.get(
-                      WMS_URL,
-                      params=params,
-                      timeout=30
-                  )
 
-                  if response.status_code != 200:
-                      return None
+          marker.bindPopup(`
 
-                  return parse_fwi(
-                      response.text
-                  )
+            <div
+              style="
+                direction:rtl;
+                text-align:right;
+                min-width:190px;
+                line-height:1.9;
+              "
+            >
 
-              except Exception:
-                  return None
+              <b>
+                پیش‌بینی وقوع حریق احتمالی
+              </b>
 
-          print("Loading fars.geojson...")
+              <hr>
 
-          fars = gpd.read_file(
-              "fars.geojson"
+              <b>شاخص FWI:</b>
+              ${value.toFixed(2)}
+
+              <br>
+
+              <b>طبقه خطر:</b>
+              ${fwiClass(value)}
+
+              <br>
+
+              <b>تاریخ شمسی:</b>
+              ${fwiData.forecast_shamsi}
+
+              <br>
+
+              <b>تاریخ میلادی:</b>
+              ${fwiData.forecast_gregorian}
+
+              <br>
+
+              <b>عرض جغرافیایی:</b>
+              ${lat.toFixed(5)}
+
+              <br>
+
+              <b>طول جغرافیایی:</b>
+              ${lon.toFixed(5)}
+
+            </div>
+
+          `);
+
+
+          markers.push(marker);
+        }
+      );
+
+
+      // ===================================================
+      // آمار محدوده فیلترشده
+      // ===================================================
+
+      const values =
+        visible.map(
+          point =>
+            Number(point.fwi)
+        );
+
+
+      if (values.length > 0) {
+
+        const min =
+          Math.min(...values);
+
+        const max =
+          Math.max(...values);
+
+        const mean =
+          values.reduce(
+            (sum, value) =>
+              sum + value,
+            0
+          ) / values.length;
+
+
+        document.getElementById(
+          "statCount"
+        ).textContent =
+          values.length.toLocaleString(
+            "fa-IR"
+          );
+
+        document.getElementById(
+          "statMin"
+        ).textContent =
+          min.toFixed(2);
+
+        document.getElementById(
+          "statMax"
+        ).textContent =
+          max.toFixed(2);
+
+        document.getElementById(
+          "statMean"
+        ).textContent =
+          mean.toFixed(2);
+
+      } else {
+
+        document.getElementById(
+          "statCount"
+        ).textContent = "0";
+
+        document.getElementById(
+          "statMin"
+        ).textContent = "-";
+
+        document.getElementById(
+          "statMax"
+        ).textContent = "-";
+
+        document.getElementById(
+          "statMean"
+        ).textContent = "-";
+      }
+
+
+      const names = {
+        all: "کل استان فارس",
+        protected: "مناطق حفاظت‌شده",
+        hunting: "مناطق ممنوعه شکار"
+      };
+
+
+      document.getElementById(
+        "filterStatus"
+      ).textContent =
+        names[currentFilter] +
+        " | " +
+        values.length.toLocaleString(
+          "fa-IR"
+        ) +
+        " نقطه دارای داده FWI";
+    }
+
+
+    // =====================================================
+    // نمایش مرزها
+    // =====================================================
+
+    function createBoundaryLayers() {
+
+      farsLayer = L.geoJSON(
+        farsData,
+        {
+          style: {
+            color: "#222",
+            weight: 2,
+            fill: false
+          }
+        }
+      ).addTo(map);
+
+
+      protectedLayer = L.geoJSON(
+        protectedData,
+        {
+          style: {
+            color: "#16a34a",
+            weight: 1.4,
+            fillColor: "#16a34a",
+            fillOpacity: 0.08
+          }
+        }
+      );
+
+
+      huntingLayer = L.geoJSON(
+        huntingData,
+        {
+          style: {
+            color: "#dc2626",
+            weight: 1.4,
+            fillColor: "#dc2626",
+            fillOpacity: 0.06
+          }
+        }
+      );
+    }
+
+
+    // =====================================================
+    // تغییر فیلتر مکانی
+    // =====================================================
+
+    document.getElementById(
+      "locationFilter"
+    ).addEventListener(
+      "change",
+      function () {
+
+        currentFilter =
+          this.value;
+
+
+        if (
+          protectedLayer &&
+          map.hasLayer(
+            protectedLayer
           )
+        ) {
+          map.removeLayer(
+            protectedLayer
+          );
+        }
 
-          if fars.crs is None:
-              fars = fars.set_crs(
-                  "EPSG:4326"
-              )
-          else:
-              fars = fars.to_crs(
-                  "EPSG:4326"
-              )
 
-          try:
-              geometry = (
-                  fars.geometry
-                  .union_all()
-              )
-          except AttributeError:
-              geometry = (
-                  fars.geometry
-                  .unary_union
-              )
-
-          points = []
-
-          lat = BBOX[1]
-
-          while lat <= BBOX[3] + 0.000001:
-
-              lon = BBOX[0]
-
-              while lon <= BBOX[2] + 0.000001:
-
-                  point = Point(
-                      lon,
-                      lat
-                  )
-
-                  if geometry.covers(point):
-                      points.append(
-                          (
-                              round(lon, 5),
-                              round(lat, 5)
-                          )
-                      )
-
-                  lon += GRID_STEP
-
-              lat += GRID_STEP
-
-          print(
-              "Grid points inside Fars:",
-              len(points)
+        if (
+          huntingLayer &&
+          map.hasLayer(
+            huntingLayer
           )
+        ) {
+          map.removeLayer(
+            huntingLayer
+          );
+        }
 
-          print("================================")
 
-          results = []
+        if (
+          currentFilter ===
+          "protected"
+        ) {
 
-          total = len(points)
+          protectedLayer.addTo(
+            map
+          );
 
-          for index, (lon, lat) in enumerate(
-              points,
-              start=1
-          ):
+        }
 
-              value = get_fwi(
-                  lon,
-                  lat
-              )
 
-              if value is not None:
+        if (
+          currentFilter ===
+          "hunting"
+        ) {
 
-                  results.append({
-                      "lat": lat,
-                      "lon": lon,
-                      "fwi": value
-                  })
+          huntingLayer.addTo(
+            map
+          );
 
-                  print(
-                      f"[{index}/{total}]",
-                      lat,
-                      lon,
-                      "FWI =",
-                      value
-                  )
+        }
 
-              else:
 
-                  print(
-                      f"[{index}/{total}]",
-                      lat,
-                      lon,
-                      "NO DATA"
-                  )
+        renderFWI();
+      }
+    );
 
-          print("================================")
-          print("FWI FORECAST RESULT")
-          print("================================")
-          print(
-              "Forecast:",
-              target_date
+
+    // =====================================================
+    // حالت شب و روز
+    // =====================================================
+
+    document.getElementById(
+      "themeBtn"
+    ).addEventListener(
+      "click",
+      function () {
+
+        document.body.classList.toggle(
+          "dark"
+        );
+
+        if (
+          document.body.classList.contains(
+            "dark"
           )
-          print(
-              "Shamsi:",
-              shamsi_date
-          )
-          print(
-              "Valid numeric points:",
-              len(results)
-          )
+        ) {
 
-          if not results:
-              raise RuntimeError(
-                  "No numeric FWI values were returned."
-              )
-
-          values = [
-              p["fwi"]
-              for p in results
-          ]
-
-          minimum = min(values)
-          maximum = max(values)
-          mean = sum(values) / len(values)
-
-          def risk_class(value):
-
-              if value < 11.2:
-                  return "Low"
-
-              if value < 21.3:
-                  return "Moderate"
-
-              if value < 38:
-                  return "High"
-
-              if value < 50:
-                  return "Very High"
-
-              if value <= 70:
-                  return "Extreme"
-
-              return "Very Extreme"
-
-          for point in results:
-              point["risk_class"] = risk_class(
-                  point["fwi"]
-              )
-
-          output = {
-              "forecast_gregorian":
-                  target_date,
-
-              "forecast_shamsi":
-                  shamsi_date,
-
-              "generated_at_iran":
-                  now.strftime(
-                      "%Y-%m-%d %H:%M"
-                  ),
-
-              "source":
-                  "Copernicus EFFIS / ECMWF",
-
-              "layer":
-                  "ecmwf.query",
-
-              "display_layer":
-                  "ecmwf.fwi",
-
-              "query_layer":
-                  "ecmwf.query",
-
-              "crs":
-                  "EPSG:3857",
-
-              "region":
-                  "Fars Province, Iran",
-
-              "bbox":
-                  BBOX,
-
-              "grid_step":
-                  GRID_STEP,
-
-              "statistics": {
-                  "min":
-                      round(
-                          minimum,
-                          3
-                      ),
-
-                  "max":
-                      round(
-                          maximum,
-                          3
-                      ),
-
-                  "mean":
-                      round(
-                          mean,
-                          3
-                      ),
-
-                  "count":
-                      len(results)
-              },
-
-              "points":
-                  results
+          if (
+            map.hasLayer(
+              dayLayer
+            )
+          ) {
+            map.removeLayer(
+              dayLayer
+            );
           }
 
-          with open(
-              OUTPUT_FILE,
-              "w",
-              encoding="utf-8"
-          ) as f:
+          nightLayer.addTo(
+            map
+          );
 
-              json.dump(
-                  output,
-                  f,
-                  ensure_ascii=False,
-                  indent=2
-              )
+        } else {
 
-          print("================================")
-          print("FWI JSON READY")
-          print("================================")
-          print(
-              "File:",
-              OUTPUT_FILE
-          )
-          print(
-              "Forecast:",
-              target_date
-          )
-          print(
-              "Shamsi:",
-              shamsi_date
-          )
-          print(
-              "Minimum:",
-              round(minimum, 3)
-          )
-          print(
-              "Maximum:",
-              round(maximum, 3)
-          )
-          print(
-              "Mean:",
-              round(mean, 3)
-          )
-          print(
-              "Points:",
-              len(results)
-          )
-          print("================================")
+          if (
+            map.hasLayer(
+              nightLayer
+            )
+          ) {
+            map.removeLayer(
+              nightLayer
+            );
+          }
 
-          PY
+          dayLayer.addTo(
+            map
+          );
+        }
+      }
+    );
 
-          python request_fwi.py
 
-      - name: Show FWI result
-        run: |
-          echo "================================"
-          echo "FWI FARS"
-          echo "================================"
+    // =====================================================
+    // معرفی سامانه
+    // =====================================================
 
-          python - <<'PY'
-          import json
+    document.getElementById(
+      "aboutBtn"
+    ).addEventListener(
+      "click",
+      function () {
 
-          with open(
-              "data/fwi_fars.json",
-              encoding="utf-8"
-          ) as f:
-              data = json.load(f)
+        document.getElementById(
+          "aboutPanel"
+        ).style.display = "block";
+      }
+    );
 
-          print(
-              "Forecast:",
-              data["forecast_gregorian"]
-          )
 
-          print(
-              "Shamsi:",
-              data["forecast_shamsi"]
-          )
+    document.getElementById(
+      "aboutClose"
+    ).addEventListener(
+      "click",
+      function () {
 
-          print(
-              "Grid step:",
-              data["grid_step"]
-          )
+        document.getElementById(
+          "aboutPanel"
+        ).style.display = "none";
+      }
+    );
 
-          print(
-              "Minimum:",
-              data["statistics"]["min"]
-          )
 
-          print(
-              "Maximum:",
-              data["statistics"]["max"]
-          )
+    // =====================================================
+    // بارگذاری داده‌ها
+    // =====================================================
 
-          print(
-              "Mean:",
-              data["statistics"]["mean"]
-          )
+    Promise.all([
 
-          print(
-              "Points:",
-              data["statistics"]["count"]
-          )
-          PY
+      fetch(
+        "data/fwi_fars.json"
+      ).then(
+        response => {
 
-          echo "================================"
+          if (!response.ok) {
+            throw new Error(
+              "فایل fwi_fars.json پیدا نشد."
+            );
+          }
 
-      - name: Save FWI
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          return response.json();
+        }
+      ),
 
-          git add data/fwi_fars.json
+      fetch(
+        "fars.geojson"
+      ).then(
+        response => {
 
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Update FWI forecast for tomorrow"
-            git push
-          fi
+          if (!response.ok) {
+            throw new Error(
+              "فایل fars.geojson پیدا نشد."
+            );
+          }
+
+          return response.json();
+        }
+      ),
+
+      fetch(
+        "protected_areas.geojson"
+      ).then(
+        response => {
+
+          if (!response.ok) {
+            throw new Error(
+              "فایل protected_areas.geojson پیدا نشد."
+            );
+          }
+
+          return response.json();
+        }
+      ),
+
+      fetch(
+        "hunting_banned.geojson"
+      ).then(
+        response => {
+
+          if (!response.ok) {
+            throw new Error(
+              "فایل hunting_banned.geojson پیدا نشد."
+            );
+          }
+
+          return response.json();
+        }
+      )
+
+    ])
+
+
+    .then(
+      (
+        [
+          fwi,
+          fars,
+          protectedAreas,
+          huntingBanned
+        ]
+      ) => {
+
+        fwiData = fwi;
+        farsData = fars;
+        protectedData = protectedAreas;
+        huntingData = huntingBanned;
+
+
+        document.getElementById(
+          "dateLine"
+        ).textContent =
+          "پیش‌بینی برای " +
+          fwi.forecast_shamsi +
+          " | " +
+          fwi.forecast_gregorian;
+
+
+        createBoundaryLayers();
+
+
+        if (
+          farsLayer &&
+          farsLayer.getBounds().isValid()
+        ) {
+
+          map.fitBounds(
+            farsLayer.getBounds(),
+            {
+              padding: [20, 20]
+            }
+          );
+        }
+
+
+        renderFWI();
+
+
+        document.getElementById(
+          "loading"
+        ).style.display = "none";
+      }
+    )
+
+
+    .catch(
+      error => {
+
+        console.error(error);
+
+        document.getElementById(
+          "loading"
+        ).textContent =
+          "خطا در دریافت داده‌های سامانه";
+
+        document.getElementById(
+          "filterStatus"
+        ).textContent =
+          error.message;
+      }
+    );
+
+  </script>
+
+</body>
+</html>
