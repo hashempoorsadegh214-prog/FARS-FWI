@@ -8,17 +8,17 @@ response = requests.get(JS_URL, timeout=120)
 js = response.text
 
 print("=" * 70)
-print("SEARCHING FEATURE INFO IMPLEMENTATION")
+print("SEARCHING ACTUAL QUERY CODE")
 print("=" * 70)
 
 patterns = [
-    "info_layer_srs",
     "defaultlayerinfoparams",
-    "GetFeatureInfo",
-    "getFeatureInfo",
-    "query_proxy",
     "info_layer",
-    "layerInfo"
+    "query_proxy",
+    ".getFeatureInfo",
+    "getFeatureInfo(",
+    "wmsParams",
+    "featureInfo"
 ]
 
 for pattern in patterns:
@@ -37,17 +37,17 @@ for pattern in patterns:
 
     print("FOUND:", len(matches))
 
-    for match in matches[:10]:
+    for match in matches[:3]:
 
         start = max(
             0,
-            match.start() - 2500
+            match.start() - 4000
         )
 
         end = min(
             len(js),
-            match.end() + 5000
+            match.end() + 7000
         )
 
         print(js[start:end])
-        print("\n" + "-" * 50 + "\n")
+        print("\n" + "-" * 60 + "\n")
