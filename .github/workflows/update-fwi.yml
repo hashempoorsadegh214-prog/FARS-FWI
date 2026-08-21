@@ -75,16 +75,19 @@ jobs:
           BOUNDARY_FILE = "fars.geojson"
           OUTPUT_FILE = "data/fwi_fars.json"
 
-          print("Reading FWI...")
+          print("Reading GRIB...")
 
           ds = xr.open_dataset(
               GRIB_FILE,
               engine="cfgrib",
-              backend_kwargs={"indexpath": ""}
+              backend_kwargs={
+                  "indexpath": ""
+              }
           )
 
           print("Variables:", list(ds.data_vars))
           print("Dimensions:", dict(ds.sizes))
+          print("Coordinates:", list(ds.coords))
 
           da = ds["fwinx"]
 
@@ -93,60 +96,147 @@ jobs:
           print("FWI shape:", values.shape)
           print("FWI dimensions:", da.dims)
 
-          # پیدا کردن نام مختصات
-          lat_name = "latitude"
-          lon_name = "longitude"
+          # ---------------------------------
+          # حالت استاندارد شبکه‌ای
+          # ---------------------------------
 
-          latitudes = np.asarray(da[lat_name].values)
-          longitudes = np.asarray(da[lon_name].values)
+          if values.ndim == 2:
 
-          # اطمینان از دوبعدی بودن شبکه
-          if values.ndim != 2:
-              raise RuntimeError(
-                  f"Unexpected FWI shape: {values.shape}"
+              latitudes = np.asarray(
+                  ds["latitude"].values
               )
 
-          print("Reading Fars boundary...")
+              longitudes = np.asarray(
+                  ds["longitude"].values
+              )
 
-          fars = gpd.read_file(BOUNDARY_FILE)
+              fars = gpd.read_file(
+                  BOUNDARY_FILE
+              )
 
-          if fars.crs is None:
-              fars = fars.set_crs("EPSG:4326")
-          else:
-              fars = fars.to_crs("EPSG:4326")
+              if fars.crs is None:
+                  fars = fars.set_crs(
+                      "EPSG:4326"
+                  )
+              else:
+                  fars = fars.to_crs(
+                      "EPSG:4326"
+                  )
 
-          fars_geometry = fars.geometry.union_all()
+              geometry = fars.geometry.union_all()
 
-          points = []
+              points = []
 
-          print("Selecting grid cells inside Fars...")
+              for i, lat in enumerate(latitudes):
 
-          for i, lat in enumerate(latitudes):
-              for j, lon in enumerate(longitudes):
+                  for j, lon in enumerate(longitudes):
 
-                  value = values[i, j]
+                      value = values[i, j]
+
+                      if not np.isfinite(value):
+                          continue
+
+                      point = Point(
+                          float(lon),
+                          float(lat)
+                      )
+
+                      if geometry.contains(point):
+
+                          points.append({
+                              "lat": round(
+                                  float(lat), 6
+                              ),
+                              "lon": round(
+                                  float(lon), 6
+                              ),
+                              "fwi": round(
+                                  float(value), 3
+                              )
+                          })
+
+          # ---------------------------------
+          # حالت فعلی فایل CEMS
+          # FWI به صورت آرایه 339 تایی
+          # ---------------------------------
+
+          elif values.ndim == 1:
+
+              print(
+                  "FWI is a 1D list of grid cells."
+              )
+
+              # تلاش برای پیدا کردن مختصات
+              if (
+                  "latitude" in ds.variables
+                  and
+                  "longitude" in ds.variables
+              ):
+
+                  latitudes = np.asarray(
+                      ds["latitude"].values
+                  )
+
+                  longitudes = np.asarray(
+                      ds["longitude"].values
+                  )
+
+              else:
+
+                  latitudes = None
+                  longitudes = None
+
+              points = []
+
+              for i, value in enumerate(values):
 
                   if not np.isfinite(value):
                       continue
 
-                  point = Point(
-                      float(lon),
-                      float(lat)
-                  )
+                  item = {
+                      "index": i,
+                      "fwi": round(
+                          float(value), 3
+                      )
+                  }
 
-                  if fars_geometry.contains(point):
+                  if (
+                      latitudes is not None
+                      and
+                      longitudes is not None
+                      and
+                      len(latitudes) == len(values)
+                      and
+                      len(longitudes) == len(values)
+                  ):
 
-                      points.append({
-                          "lat": round(float(lat), 6),
-                          "lon": round(float(lon), 6),
-                          "fwi": round(float(value), 3)
-                      })
+                      item["lat"] = round(
+                          float(latitudes[i]), 6
+                      )
+
+                      item["lon"] = round(
+                          float(longitudes[i]), 6
+                      )
+
+                  points.append(item)
+
+          else:
+
+              raise RuntimeError(
+                  f"Unsupported FWI shape: {values.shape}"
+              )
+
+          # ---------------------------------
+          # خروجی
+          # ---------------------------------
 
           output = {
               "date": "2025-08-20",
               "variable": "fwinx",
-              "source": "Copernicus CEMS Fire Weather Index",
-              "region": "Fars Province, Iran",
+              "source":
+                  "Copernicus CEMS Fire Weather Index",
+              "region":
+                  "Fars Province, Iran",
               "points": points
           }
 
@@ -155,6 +245,7 @@ jobs:
               "w",
               encoding="utf-8"
           ) as f:
+
               json.dump(
                   output,
                   f,
@@ -165,22 +256,42 @@ jobs:
           print("================================")
           print("FWI FARS RESULT")
           print("================================")
-          print("Points inside Fars:", len(points))
+          print(
+              "Number of values:",
+              len(points)
+          )
 
           if points:
-              fwi_values = [p["fwi"] for p in points]
 
-              print("Minimum FWI:", min(fwi_values))
-              print("Maximum FWI:", max(fwi_values))
+              fwi_values = [
+                  p["fwi"]
+                  for p in points
+              ]
+
+              print(
+                  "Minimum FWI:",
+                  min(fwi_values)
+              )
+
+              print(
+                  "Maximum FWI:",
+                  max(fwi_values)
+              )
+
               print(
                   "Mean FWI:",
                   round(
-                      sum(fwi_values) / len(fwi_values),
+                      sum(fwi_values)
+                      / len(fwi_values),
                       3
                   )
               )
 
-          print("Output:", OUTPUT_FILE)
+          print(
+              "Output:",
+              OUTPUT_FILE
+          )
+
           print("================================")
           PY
 
@@ -192,7 +303,7 @@ jobs:
           cat data/fwi_fars.json
           echo "=============================="
 
-      - name: Save FWI to repository
+      - name: Save FWI
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
