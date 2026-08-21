@@ -63,6 +63,7 @@ jobs:
         run: |
           cat > extract_fwi.py <<'PY'
           import json
+          import numpy as np
           import xarray as xr
 
           file = "data/fwi_fars.grib"
@@ -75,38 +76,66 @@ jobs:
               }
           )
 
-          print("Variables:")
-          print(list(ds.data_vars))
+          print("Variables:", list(ds.data_vars))
+          print("Dimensions:", dict(ds.sizes))
+          print("Coordinates:", list(ds.coords))
 
-          variable = list(ds.data_vars)[0]
+          variable = "fwinx"
           da = ds[variable]
 
-          lat_name = "latitude"
-          lon_name = "longitude"
+          print("FWI shape:", da.shape)
 
-          lats = da[lat_name].values
-          lons = da[lon_name].values
-          values = da.values
-
-          points = []
-
-          for i, lat in enumerate(lats):
-              for j, lon in enumerate(lons):
-                  value = values[i][j]
-
-                  if value == value:
-                      points.append({
-                          "lat": float(lat),
-                          "lon": float(lon),
-                          "fwi": float(value)
-                      })
+          data = da.values
 
           output = {
               "date": "2025-08-20",
               "variable": variable,
               "source": "Copernicus CEMS Fire Weather Index",
-              "points": points
+              "resolution": "original_grid",
+              "value": None,
+              "points": []
           }
+
+          if data.ndim == 0:
+              value = float(data)
+
+              output["value"] = value
+
+              output["points"].append({
+                  "fwi": value
+              })
+
+          else:
+              lat_name = "latitude"
+              lon_name = "longitude"
+
+              lats = da[lat_name].values
+              lons = da[lon_name].values
+
+              data = np.asarray(data)
+
+              if data.ndim > 2:
+                  data = np.squeeze(data)
+
+              if data.ndim == 1:
+                  for i, value in enumerate(data):
+                      if np.isfinite(value):
+                          output["points"].append({
+                              "index": i,
+                              "fwi": float(value)
+                          })
+
+              elif data.ndim == 2:
+                  for i, lat in enumerate(lats):
+                      for j, lon in enumerate(lons):
+                          value = data[i, j]
+
+                          if np.isfinite(value):
+                              output["points"].append({
+                                  "lat": float(lat),
+                                  "lon": float(lon),
+                                  "fwi": float(value)
+                              })
 
           with open("data/fwi.json", "w", encoding="utf-8") as f:
               json.dump(
@@ -117,7 +146,8 @@ jobs:
               )
 
           print("FWI variable:", variable)
-          print("FWI points:", len(points))
+          print("FWI shape:", data.shape if hasattr(data, "shape") else "scalar")
+          print("FWI points:", len(output["points"]))
           print("Created: data/fwi.json")
           PY
 
@@ -131,5 +161,5 @@ jobs:
           echo "JSON:"
           ls -lh data/fwi.json
 
-          echo "Files:"
-          find data -maxdepth 1 -type f -print
+          echo "JSON preview:"
+          head -80 data/fwi.json
