@@ -1,0 +1,59 @@
+name: Update FWI Fars
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 1 * * *"
+
+jobs:
+  update-fwi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install cdsapi
+
+      - name: Download FWI
+        env:
+          EWDS_API_KEY: ${{ secrets.EWDS_API_KEY }}
+        run: |
+          mkdir -p data
+
+          cat > request_fwi.py <<'PY'
+          import os
+          import cdsapi
+
+          client = cdsapi.Client(
+              url="https://ewds.climate.copernicus.eu/api",
+              key=os.environ["EWDS_API_KEY"]
+          )
+
+          request = {
+              "product_type": "reanalysis",
+              "variable": ["fire_weather_index"],
+              "dataset_type": "consolidated_dataset",
+              "system_version": ["4_1"],
+              "year": ["2026"],
+              "month": ["08"],
+              "day": ["21"],
+              "data_format": "grib",
+              "area": [32, 50, 27, 55.8]
+          }
+
+          client.retrieve(
+              "cems-fire-historical-v1",
+              request,
+              "data/fwi_fars.grib"
+          )
+          PY
+
+          python request_fwi.py
