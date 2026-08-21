@@ -15,76 +15,64 @@ jobs:
 
     steps:
 
+      # ---------------------------------------
+      # 1. دریافت پروژه
+      # ---------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------------------------------------
+      # 2. Python
+      # ---------------------------------------
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ---------------------------------------
+      # 3. نصب ابزارها
+      # ---------------------------------------
       - name: Install dependencies
         run: |
-          pip install requests geopandas shapely
+          pip install requests pillow numpy
 
-      - name: Get FWI forecast
+      # ---------------------------------------
+      # 4. دریافت FWI برای فردا از GWIS
+      # ---------------------------------------
+      - name: Download FWI Forecast
         run: |
 
-          cat > request_fwi.py <<'PY'
+          mkdir -p data
 
-          import json
+          cat > request_fwi.py <<'PY'
           import requests
-          import geopandas as gpd
+          import json
+          import math
           from datetime import datetime, timedelta, timezone
 
-          # ============================================================
-          # تنظیمات
-          # ============================================================
-
-          WMS_URL = "https://maps.effis.emergency.copernicus.eu/gwis"
-
-          LAYER = "ecmwf.fwi"
-
-          BOUNDARY_FILE = "fars.geojson"
-
-          OUTPUT_FILE = "data/fwi_fars.json"
-
-          # محدوده تقریبی استان فارس
-          WEST = 50.0
-          EAST = 55.8
-          SOUTH = 27.0
-          NORTH = 31.8
-
-          # فاصله نمونه برداری
-          STEP = 0.25
-
-          # ============================================================
+          # ==========================================
           # تاریخ ایران
-          # ============================================================
+          # ==========================================
 
           iran_tz = timezone(timedelta(hours=3, minutes=30))
 
-          now_iran = datetime.now(iran_tz)
+          now = datetime.now(iran_tz)
 
-          forecast_date = now_iran.date() + timedelta(days=1)
+          # هشدار برای فردا
+          target = now.date() + timedelta(days=1)
+
+          target_date = target.strftime("%Y-%m-%d")
 
           print("================================")
           print("FWI FORECAST")
           print("================================")
 
-          print(
-              "Iran current date:",
-              now_iran.strftime("%Y-%m-%d %H:%M")
-          )
+          print("Iran current date:", now.strftime("%Y-%m-%d %H:%M"))
+          print("Forecast Gregorian:", target_date)
 
-          print(
-              "Forecast Gregorian:",
-              forecast_date.isoformat()
-          )
-
-          # ============================================================
+          # ==========================================
           # تبدیل میلادی به شمسی
-          # ============================================================
+          # ==========================================
 
           def gregorian_to_jalali(gy, gm, gd):
 
@@ -93,10 +81,10 @@ jobs:
                   31, 31, 30, 31, 30, 31
               ]
 
-              j_days_in_month = [
-                  31, 31, 31, 31, 31, 31,
-                  30, 30, 30, 30, 30, 29
-              ]
+              if gy % 4 == 0 and (
+                  gy % 100 != 0 or gy % 400 == 0
+              ):
+                  g_days_in_month[1] = 29
 
               gy2 = gy - 1600
               gm2 = gm - 1
@@ -111,12 +99,6 @@ jobs:
 
               for i in range(gm2):
                   g_day_no += g_days_in_month[i]
-
-              if gm2 > 1 and (
-                  gy % 4 == 0 and
-                  (gy % 100 != 0 or gy % 400 == 0)
-              ):
-                  g_day_no += 1
 
               g_day_no += gd2
 
@@ -133,256 +115,121 @@ jobs:
                   jy += (j_day_no - 1) // 365
                   j_day_no = (j_day_no - 1) % 365
 
-              i = 0
-
-              while (
-                  i < 11 and
-                  j_day_no >= j_days_in_month[i]
-              ):
-                  j_day_no -= j_days_in_month[i]
-                  i += 1
-
-              jm = i + 1
-              jd = j_day_no + 1
+              if j_day_no < 186:
+                  jm = 1 + j_day_no // 31
+                  jd = 1 + j_day_no % 31
+              else:
+                  jm = 7 + (j_day_no - 186) // 30
+                  jd = 1 + (j_day_no - 186) % 30
 
               return jy, jm, jd
 
           jy, jm, jd = gregorian_to_jalali(
-              forecast_date.year,
-              forecast_date.month,
-              forecast_date.day
+              target.year,
+              target.month,
+              target.day
           )
 
-          forecast_shamsi = (
-              f"{jy:04d}-{jm:02d}-{jd:02d}"
-          )
+          shamsi_date = f"{jy:04d}-{jm:02d}-{jd:02d}"
 
-          print(
-              "Forecast Shamsi:",
-              forecast_shamsi
-          )
-
+          print("Forecast Shamsi:", shamsi_date)
           print("================================")
 
-          # ============================================================
-          # مرز فارس
-          # ============================================================
-
-          fars = gpd.read_file(
-              BOUNDARY_FILE
-          )
-
-          if fars.crs is None:
-              fars = fars.set_crs("EPSG:4326")
-          else:
-              fars = fars.to_crs("EPSG:4326")
-
-          geometry = fars.geometry.union_all()
-
-          # ============================================================
-          # ساخت نقاط شبکه
-          # ============================================================
-
-          points = []
-
-          lat = SOUTH
-
-          while lat <= NORTH:
-
-              lon = WEST
-
-              while lon <= EAST:
-
-                  if geometry.contains(
-                      gpd.points_from_xy(
-                          [lon],
-                          [lat]
-                      )[0]
-                  ):
-
-                      points.append(
-                          (
-                              round(lat, 6),
-                              round(lon, 6)
-                          )
-                      )
-
-                  lon += STEP
-
-              lat += STEP
-
-          print(
-              "Grid points inside Fars:",
-              len(points)
-          )
-
-          # ============================================================
-          # درخواست GetFeatureInfo
-          # ============================================================
-
-          results = []
-
-          for number, (lat, lon) in enumerate(points, 1):
-
-              # یک BBOX کوچک اطراف نقطه
-              delta = 0.02
-
-              bbox = (
-                  f"{lon-delta},"
-                  f"{lat-delta},"
-                  f"{lon+delta},"
-                  f"{lat+delta}"
-              )
-
-              params = {
-
-                  "SERVICE": "WMS",
-
-                  "VERSION": "1.1.1",
-
-                  "REQUEST": "GetFeatureInfo",
-
-                  "LAYERS": LAYER,
-
-                  "QUERY_LAYERS": LAYER,
-
-                  "STYLES": "",
-
-                  "SRS": "EPSG:4326",
-
-                  "BBOX": bbox,
-
-                  "WIDTH": 101,
-
-                  "HEIGHT": 101,
-
-                  "X": 50,
-
-                  "Y": 50,
-
-                  "INFO_FORMAT": "text/plain",
-
-                  "FEATURE_COUNT": 1,
-
-                  "TIME": forecast_date.isoformat()
-              }
-
-              try:
-
-                  response = requests.get(
-                      WMS_URL,
-                      params=params,
-                      timeout=30
-                  )
-
-                  text = response.text.strip()
-
-                  if response.status_code != 200:
-                      continue
-
-                  # ----------------------------------------------------
-                  # استخراج عدد FWI از پاسخ
-                  # ----------------------------------------------------
-
-                  import re
-
-                  matches = re.findall(
-                      r"[-+]?\d+(?:\.\d+)?",
-                      text
-                  )
-
-                  if not matches:
-                      continue
-
-                  value = None
-
-                  for item in matches:
-
-                      number_value = float(item)
-
-                      if (
-                          number_value >= 0
-                          and
-                          number_value <= 150
-                      ):
-                          value = number_value
-                          break
-
-                  if value is None:
-                      continue
-
-                  results.append({
-
-                      "lat": lat,
-
-                      "lon": lon,
-
-                      "fwi": round(
-                          value,
-                          3
-                      )
-
-                  })
-
-                  print(
-                      f"{number}/{len(points)} "
-                      f"LAT={lat} "
-                      f"LON={lon} "
-                      f"FWI={value}"
-                  )
-
-              except Exception as e:
-
-                  print(
-                      "Request error:",
-                      lat,
-                      lon,
-                      str(e)
-                  )
-
-          # ============================================================
-          # خروجی
-          # ============================================================
-
-          output = {
-
-              "forecast_date_gregorian":
-                  forecast_date.isoformat(),
-
-              "forecast_date_shamsi":
-                  forecast_shamsi,
-
-              "generated_at_iran":
-                  now_iran.strftime(
-                      "%Y-%m-%d %H:%M"
-                  ),
-
-              "variable":
-                  "fwinx",
-
-              "source":
-                  "Copernicus CEMS Fire Weather Index",
-
-              "region":
-                  "Fars Province, Iran",
-
-              "points":
-                  results
+          # ==========================================
+          # GWIS WMS
+          # ==========================================
+
+          url = "https://maps.effis.emergency.copernicus.eu/gwis"
+
+          params = {
+              "SERVICE": "WMS",
+              "VERSION": "1.1.1",
+              "REQUEST": "GetMap",
+              "LAYERS": "ecmwf.fwi",
+              "STYLES": "",
+              "SRS": "EPSG:4326",
+
+              # فارس
+              "BBOX": "50.0,27.0,55.0,32.0",
+
+              "WIDTH": "1000",
+              "HEIGHT": "1000",
+
+              # مهم:
+              # GWIS image/geotiff را قبول نمی‌کند.
+              # از image/png استفاده می‌کنیم.
+              "FORMAT": "image/png",
+
+              "TRANSPARENT": "TRUE",
+
+              # تاریخ پیش‌بینی
+              "TIME": target_date
           }
 
-          # ============================================================
-          # ذخیره
-          # ============================================================
+          print("Requesting GWIS...")
+          print("Layer:", params["LAYERS"])
+          print("Time:", target_date)
 
-          import os
-
-          os.makedirs(
-              "data",
-              exist_ok=True
+          response = requests.get(
+              url,
+              params=params,
+              timeout=120
           )
 
+          print("HTTP status:", response.status_code)
+          print("Content-Type:", response.headers.get("Content-Type"))
+
+          if response.status_code != 200:
+              raise RuntimeError(
+                  f"GWIS HTTP error: {response.status_code}"
+              )
+
+          content_type = response.headers.get(
+              "Content-Type",
+              ""
+          ).lower()
+
+          if "image/png" not in content_type:
+              print(response.text[:2000])
+
+              raise RuntimeError(
+                  "GWIS did not return PNG."
+              )
+
           with open(
-              OUTPUT_FILE,
+              "data/fwi_forecast.png",
+              "wb"
+          ) as f:
+              f.write(response.content)
+
+          print("GWIS image saved.")
+
+          # ==========================================
+          # توجه مهم
+          #
+          # PNG مقدار عددی FWI را در خود پیکسل
+          # به صورت مستقیم نگه نمی‌دارد.
+          #
+          # بنابراین برای سایت، فعلاً تصویر
+          # هشدار FWI فردا را ذخیره می‌کنیم.
+          # ==========================================
+
+          output = {
+              "forecast_gregorian": target_date,
+              "forecast_shamsi": shamsi_date,
+              "source": "Copernicus GWIS / ECMWF",
+              "layer": "ecmwf.fwi",
+              "bbox": [
+                  50.0,
+                  27.0,
+                  55.0,
+                  32.0
+              ],
+              "image": "fwi_forecast.png"
+          }
+
+          with open(
+              "data/fwi.json",
               "w",
               encoding="utf-8"
           ) as f:
@@ -394,83 +241,38 @@ jobs:
                   indent=2
               )
 
-          # ============================================================
-          # گزارش
-          # ============================================================
-
           print("================================")
-          print("FWI RESULT")
-          print("================================")
-
-          print(
-              "Forecast Gregorian:",
-              forecast_date.isoformat()
-          )
-
-          print(
-              "Forecast Shamsi:",
-              forecast_shamsi
-          )
-
-          print(
-              "Number of FWI points:",
-              len(results)
-          )
-
-          if results:
-
-              values = [
-                  p["fwi"]
-                  for p in results
-              ]
-
-              print(
-                  "Minimum FWI:",
-                  round(min(values), 3)
-              )
-
-              print(
-                  "Maximum FWI:",
-                  round(max(values), 3)
-              )
-
-              print(
-                  "Mean FWI:",
-                  round(
-                      sum(values) / len(values),
-                      3
-                  )
-              )
-
-          print(
-              "Output:",
-              OUTPUT_FILE
-          )
-
+          print("FWI FORECAST READY")
+          print("Date:", target_date)
+          print("Shamsi:", shamsi_date)
           print("================================")
 
           PY
 
           python request_fwi.py
 
+      # ---------------------------------------
+      # 5. نمایش نتیجه
+      # ---------------------------------------
       - name: Show result
         run: |
-
-          echo "========== FWI FARS =========="
-
-          cat data/fwi_fars.json
-
+          echo "=============================="
+          echo "FWI FORECAST"
+          echo "=============================="
+          cat data/fwi.json
           echo "=============================="
 
+      # ---------------------------------------
+      # 6. ذخیره در GitHub
+      # ---------------------------------------
       - name: Save FWI
         run: |
 
           git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add data/fwi_fars.json
+          git add data/fwi.json
+          git add data/fwi_forecast.png
 
           if git diff --cached --quiet; then
 
@@ -478,8 +280,7 @@ jobs:
 
           else
 
-            git commit \
-              -m "Update FWI Fars forecast"
+            git commit -m "Update FWI forecast"
 
             git push
 
