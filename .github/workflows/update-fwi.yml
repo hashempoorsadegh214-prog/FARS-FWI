@@ -42,9 +42,9 @@ jobs:
               "variable": ["fire_weather_index"],
               "dataset_type": "consolidated_dataset",
               "system_version": ["4_1"],
-              "year": ["2026"],
+              "year": ["2025"],
               "month": ["08"],
-              "day": ["21"],
+              "day": ["20"],
               "data_format": "grib",
               "area": [32, 50, 27, 55.8]
           }
