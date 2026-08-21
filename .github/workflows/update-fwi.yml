@@ -14,19 +14,31 @@ jobs:
 
     steps:
 
+      # ==========================================
+      # 1. دریافت پروژه
+      # ==========================================
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ==========================================
+      # 2. Python
+      # ==========================================
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ==========================================
+      # 3. نصب ابزارها
+      # ==========================================
       - name: Install dependencies
         run: |
           pip install requests
 
-      - name: Get FWI Forecast
+      # ==========================================
+      # 4. دریافت FWI فردا از GWIS
+      # ==========================================
+      - name: Download FWI Forecast
         run: |
 
           mkdir -p data
@@ -34,26 +46,25 @@ jobs:
           cat > request_fwi.py <<'PY'
           import requests
           import json
-          import re
+          import math
           from datetime import datetime, timedelta, timezone
 
-
-          # =====================================================
+          # ==========================================
           # زمان ایران
-          # =====================================================
+          # ==========================================
 
           IRAN_TZ = timezone(timedelta(hours=3, minutes=30))
 
           now = datetime.now(IRAN_TZ)
 
+          # هشدار برای فردا
           target = now.date() + timedelta(days=1)
 
           target_date = target.strftime("%Y-%m-%d")
 
-
-          # =====================================================
-          # میلادی به شمسی
-          # =====================================================
+          # ==========================================
+          # تبدیل میلادی به شمسی
+          # ==========================================
 
           def gregorian_to_jalali(gy, gm, gd):
 
@@ -86,7 +97,6 @@ jobs:
               j_day_no = g_day_no - 79
 
               j_np = j_day_no // 12053
-
               j_day_no %= 12053
 
               jy = (
@@ -98,21 +108,14 @@ jobs:
               j_day_no %= 1461
 
               if j_day_no >= 366:
-
                   jy += (j_day_no - 1) // 365
-
                   j_day_no = (j_day_no - 1) % 365
 
               if j_day_no < 186:
-
                   jm = 1 + j_day_no // 31
-
                   jd = 1 + j_day_no % 31
-
               else:
-
                   jm = 7 + (j_day_no - 186) // 30
-
                   jd = 1 + (j_day_no - 186) % 30
 
               return jy, jm, jd
@@ -125,7 +128,6 @@ jobs:
           )
 
           shamsi_date = f"{jy:04d}-{jm:02d}-{jd:02d}"
-
 
           print("================================")
           print("FWI FORECAST")
@@ -145,277 +147,293 @@ jobs:
           print("================================")
 
 
-          # =====================================================
-          # GWIS
-          # =====================================================
+          # ==========================================
+          # GWIS WMS
+          # ==========================================
 
-          GWIS_URL = (
+          BASE_URL = (
               "https://maps.effis.emergency.copernicus.eu/gwis"
           )
 
-          LAYER = "ecmwf.fwi"
-
+          # محدوده استان فارس
           WEST = 50.0
           SOUTH = 27.0
           EAST = 55.0
           NORTH = 32.0
 
-
-          # =====================================================
-          # تصویر FWI فردا
-          # =====================================================
-
-          print("Requesting GWIS map...")
-
-          map_params = {
-              "SERVICE": "WMS",
-              "VERSION": "1.1.1",
-              "REQUEST": "GetMap",
-              "LAYERS": LAYER,
-              "STYLES": "",
-              "SRS": "EPSG:4326",
-              "BBOX": (
-                  f"{WEST},{SOUTH},{EAST},{NORTH}"
-              ),
-              "WIDTH": "1000",
-              "HEIGHT": "1000",
-              "FORMAT": "image/png",
-              "TRANSPARENT": "TRUE",
-              "TIME": target_date
-          }
-
-          response = requests.get(
-              GWIS_URL,
-              params=map_params,
-              timeout=120
-          )
-
-          print(
-              "HTTP status:",
-              response.status_code
-          )
-
-          print(
-              "Content-Type:",
-              response.headers.get("Content-Type")
-          )
-
-          if response.status_code != 200:
-              raise RuntimeError(
-                  "GWIS map request failed."
-              )
-
-          content_type = response.headers.get(
-              "Content-Type",
-              ""
-          ).lower()
-
-          if "image/png" not in content_type:
-
-              print(response.text[:2000])
-
-              raise RuntimeError(
-                  "GWIS did not return PNG."
-              )
-
-          with open(
-              "data/fwi_forecast.png",
-              "wb"
-          ) as f:
-              f.write(response.content)
-
-          print(
-              "FWI forecast image saved."
-          )
-
-
-          # =====================================================
-          # GetFeatureInfo
-          #
-          # نکته:
-          # دیگر اولین عدد پاسخ را FWI فرض نمی‌کنیم.
-          # فقط پاسخ‌هایی را قبول می‌کنیم که واقعاً
-          # شامل عبارت FWI / fwi باشند.
-          # =====================================================
-
-          def get_fwi(lon, lat):
-
-              delta = 0.05
-
-              bbox = (
-                  f"{lon - delta},"
-                  f"{lat - delta},"
-                  f"{lon + delta},"
-                  f"{lat + delta}"
-              )
-
-              params = {
-                  "SERVICE": "WMS",
-                  "VERSION": "1.1.1",
-                  "REQUEST": "GetFeatureInfo",
-                  "LAYERS": LAYER,
-                  "QUERY_LAYERS": LAYER,
-                  "STYLES": "",
-                  "SRS": "EPSG:4326",
-                  "BBOX": bbox,
-                  "WIDTH": "101",
-                  "HEIGHT": "101",
-                  "X": "50",
-                  "Y": "50",
-                  "INFO_FORMAT": "text/plain",
-                  "FEATURE_COUNT": "1",
-                  "TIME": target_date
-              }
-
-              try:
-
-                  r = requests.get(
-                      GWIS_URL,
-                      params=params,
-                      timeout=30
-                  )
-
-                  if r.status_code != 200:
-                      return None
-
-                  text = r.text.strip()
-
-                  if not text:
-                      return None
-
-                  print(
-                      f"POINT {lat},{lon}: "
-                      f"{text[:300]}"
-                  )
-
-                  # -----------------------------------------
-                  # فقط اگر پاسخ واقعاً نام FWI را داشته باشد
-                  # -----------------------------------------
-
-                  patterns = [
-                      r"\bfwi\b\s*[:=]\s*(-?\d+(?:\.\d+)?)",
-                      r"\bfwinx\b\s*[:=]\s*(-?\d+(?:\.\d+)?)",
-                      r"fire.?weather.?index\s*[:=]\s*(-?\d+(?:\.\d+)?)"
-                  ]
-
-                  for pattern in patterns:
-
-                      match = re.search(
-                          pattern,
-                          text,
-                          re.IGNORECASE
-                      )
-
-                      if match:
-
-                          value = float(
-                              match.group(1)
-                          )
-
-                          if 0 <= value <= 150:
-
-                              return round(
-                                  value,
-                                  3
-                              )
-
-                  # -----------------------------------------
-                  # اگر عبارت FWI وجود داشت ولی ساختار
-                  # پاسخ متفاوت بود، عدد را حدس نمی‌زنیم.
-                  # -----------------------------------------
-
-                  return None
-
-              except Exception as e:
-
-                  print(
-                      "GetFeatureInfo error:",
-                      e
-                  )
-
-                  return None
-
-
-          # =====================================================
+          # ==========================================
           # شبکه نقاط
-          # =====================================================
+          #
+          # فاصله حدود 0.25 درجه
+          # ==========================================
 
-          points = []
-
-          # فاصله تقریبی مناسب برای FWI
-          # حدود چند کیلومتر
+          latitudes = []
 
           lat = SOUTH
 
-          while lat <= NORTH:
+          while lat <= NORTH + 0.000001:
 
-              lon = WEST
-
-              while lon <= EAST:
-
-                  value = get_fwi(
-                      round(lon, 4),
-                      round(lat, 4)
-                  )
-
-                  if value is not None:
-
-                      points.append({
-                          "lat": round(lat, 4),
-                          "lon": round(lon, 4),
-                          "fwi": value
-                      })
-
-                  lon += 0.25
+              latitudes.append(
+                  round(lat, 6)
+              )
 
               lat += 0.25
 
 
-          # =====================================================
-          # آمار
-          # =====================================================
+          longitudes = []
 
-          if points:
+          lon = WEST
 
-              values = [
-                  p["fwi"]
-                  for p in points
-              ]
+          while lon <= EAST + 0.000001:
 
-              minimum = min(values)
+              longitudes.append(
+                  round(lon, 6)
+              )
 
-              maximum = max(values)
+              lon += 0.25
 
-              mean = round(
-                  sum(values) / len(values),
-                  3
+
+          # ==========================================
+          # دریافت مقدار عددی FWI
+          # ==========================================
+
+          points = []
+
+          print("Requesting numeric FWI values...")
+          print("Target:", target_date)
+
+          for lat in latitudes:
+
+              for lon in longitudes:
+
+                  print(
+                      f"POINT {lat},{lon}:",
+                      end=" "
+                  )
+
+                  params = {
+                      "SERVICE": "WMS",
+                      "VERSION": "1.1.1",
+                      "REQUEST": "GetFeatureInfo",
+
+                      # لایه FWI
+                      "LAYERS": "ecmwf.fwi",
+                      "QUERY_LAYERS": "ecmwf.fwi",
+
+                      "STYLES": "",
+
+                      "SRS": "EPSG:4326",
+
+                      "BBOX": (
+                          f"{lon - 0.125},"
+                          f"{lat - 0.125},"
+                          f"{lon + 0.125},"
+                          f"{lat + 0.125}"
+                      ),
+
+                      "WIDTH": "1",
+                      "HEIGHT": "1",
+
+                      "X": "0",
+                      "Y": "0",
+
+                      "INFO_FORMAT": "text/plain",
+
+                      "FEATURE_COUNT": "1",
+
+                      "TIME": target_date
+                  }
+
+                  try:
+
+                      response = requests.get(
+                          BASE_URL,
+                          params=params,
+                          timeout=30
+                      )
+
+                      text = response.text.strip()
+
+                      print(
+                          response.status_code,
+                          response.headers.get(
+                              "Content-Type",
+                              ""
+                          )
+                      )
+
+                      if response.status_code != 200:
+                          continue
+
+                      # اگر سرویس خطا برگرداند
+                      if (
+                          "ServiceException" in text
+                          or "LayerNotDefined" in text
+                      ):
+                          continue
+
+                      # ==================================
+                      # استخراج عدد
+                      # ==================================
+
+                      value = None
+
+                      for line in text.splitlines():
+
+                          line = line.strip()
+
+                          if not line:
+                              continue
+
+                          # حذف متن‌های رایج
+                          clean = (
+                              line
+                              .replace(
+                                  "fwinx",
+                                  ""
+                              )
+                              .replace(
+                                  "FWI",
+                                  ""
+                              )
+                              .replace(
+                                  "=",
+                                  " "
+                              )
+                              .replace(
+                                  ":",
+                                  " "
+                              )
+                          )
+
+                          for token in clean.split():
+
+                              try:
+
+                                  number = float(token)
+
+                                  if (
+                                      math.isfinite(number)
+                                      and
+                                      0 <= number <= 200
+                                  ):
+
+                                      value = number
+                                      break
+
+                              except ValueError:
+                                  pass
+
+                          if value is not None:
+                              break
+
+                      if value is None:
+                          continue
+
+                      points.append({
+                          "lat": lat,
+                          "lon": lon,
+                          "fwi": round(
+                              float(value),
+                              3
+                          )
+                      })
+
+                  except Exception as e:
+
+                      print(
+                          "Request error:",
+                          str(e)
+                      )
+
+          # ==========================================
+          # نتیجه
+          # ==========================================
+
+          values = [
+              p["fwi"]
+              for p in points
+          ]
+
+          print()
+          print("================================")
+          print("FWI FORECAST RESULT")
+          print("================================")
+          print(
+              "Forecast:",
+              target_date
+          )
+          print(
+              "Shamsi:",
+              shamsi_date
+          )
+          print(
+              "Valid numeric points:",
+              len(points)
+          )
+
+          if values:
+
+              print(
+                  "Minimum:",
+                  min(values)
+              )
+
+              print(
+                  "Maximum:",
+                  max(values)
+              )
+
+              print(
+                  "Mean:",
+                  round(
+                      sum(values) / len(values),
+                      3
+                  )
               )
 
           else:
 
-              minimum = None
-              maximum = None
-              mean = None
+              print("Minimum: None")
+              print("Maximum: None")
+              print("Mean: None")
+
+          print("================================")
 
 
-          # =====================================================
-          # خروجی
-          # =====================================================
+          # ==========================================
+          # اگر هیچ مقدار عددی دریافت نشد
+          # ==========================================
+
+          if not points:
+
+              raise RuntimeError(
+                  "No valid numeric FWI values were returned by GWIS."
+              )
+
+
+          # ==========================================
+          # ساخت خروجی
+          # ==========================================
 
           output = {
 
-              "forecast_gregorian": target_date,
+              "forecast_gregorian":
+                  target_date,
 
-              "forecast_shamsi": shamsi_date,
+              "forecast_shamsi":
+                  shamsi_date,
 
               "generated_at_iran":
-                  now.strftime("%Y-%m-%d %H:%M"),
+                  now.strftime(
+                      "%Y-%m-%d %H:%M"
+                  ),
 
               "source":
                   "Copernicus GWIS / ECMWF",
 
               "layer":
-                  LAYER,
+                  "ecmwf.fwi",
 
               "region":
                   "Fars Province, Iran",
@@ -427,21 +445,8 @@ jobs:
                   NORTH
               ],
 
-              "points": points,
-
-              "statistics": {
-
-                  "count": len(points),
-
-                  "min": minimum,
-
-                  "max": maximum,
-
-                  "mean": mean
-              },
-
-              "image":
-                  "fwi_forecast.png"
+              "points":
+                  points
           }
 
 
@@ -459,53 +464,21 @@ jobs:
               )
 
 
-          print("================================")
-          print("FWI FORECAST RESULT")
-          print("================================")
+          print()
+          print("FWI JSON created successfully.")
           print(
-              "Forecast:",
-              target_date
+              "Output:",
+              "data/fwi.json"
           )
-          print(
-              "Shamsi:",
-              shamsi_date
-          )
-          print(
-              "Valid numeric points:",
-              len(points)
-          )
-          print(
-              "Minimum:",
-              minimum
-          )
-          print(
-              "Maximum:",
-              maximum
-          )
-          print(
-              "Mean:",
-              mean
-          )
-          print("================================")
-
-
-          # =====================================================
-          # اگر هیچ مقدار واقعی دریافت نشد،
-          # Workflow موفق ظاهری ایجاد نکند.
-          # =====================================================
-
-          if not points:
-
-              raise RuntimeError(
-                  "No valid numeric FWI values were returned "
-                  "by GWIS GetFeatureInfo."
-              )
 
           PY
 
           python request_fwi.py
 
 
+      # ==========================================
+      # 5. نمایش نتیجه
+      # ==========================================
       - name: Show result
         run: |
 
@@ -518,17 +491,19 @@ jobs:
           echo "=============================="
 
 
+      # ==========================================
+      # 6. ذخیره در GitHub
+      # ==========================================
       - name: Save FWI
         run: |
 
-          git config user.name "github-actions[bot]"
+          git config user.name \
+            "github-actions[bot]"
 
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
 
           git add data/fwi.json
-
-          git add data/fwi_forecast.png
 
           if git diff --cached --quiet; then
 
@@ -536,7 +511,8 @@ jobs:
 
           else
 
-            git commit -m "Update FWI forecast"
+            git commit \
+              -m "Update FWI forecast"
 
             git push
 
