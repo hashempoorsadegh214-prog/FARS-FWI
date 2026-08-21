@@ -1,0 +1,571 @@
+# index.html
+
+```html
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>پایش خطر آتش‌سوزی فارس - FWI</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Tahoma, Arial, sans-serif;
+      background: #f5f5f5;
+    }
+
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+
+    .title-box {
+      position: absolute;
+      z-index: 1000;
+      top: 15px;
+      right: 15px;
+
+      background: white;
+      padding: 12px 16px;
+
+      border-radius: 10px;
+
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+
+      font-weight: bold;
+      font-size: 16px;
+    }
+
+    .info-box {
+      position: absolute;
+      z-index: 1000;
+      bottom: 20px;
+      right: 15px;
+
+      background: white;
+      padding: 12px 15px;
+
+      border-radius: 10px;
+
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+
+      min-width: 210px;
+
+      line-height: 1.9;
+      font-size: 13px;
+    }
+
+    .legend {
+      position: absolute;
+      z-index: 1000;
+      bottom: 20px;
+      left: 15px;
+
+      background: white;
+      padding: 10px 12px;
+
+      border-radius: 10px;
+
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    .legend-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .loading {
+      position: absolute;
+      z-index: 2000;
+
+      top: 50%;
+      left: 50%;
+
+      transform: translate(-50%, -50%);
+
+      background: white;
+
+      padding: 15px 20px;
+
+      border-radius: 10px;
+
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="map"></div>
+
+  <div class="title-box">
+    شاخص خطر آتش‌سوزی فارس (FWI)
+  </div>
+
+  <div id="loading" class="loading">
+    در حال دریافت داده FWI...
+  </div>
+
+  <div class="info-box" id="info">
+    <b>اطلاعات FWI</b><br>
+    در حال دریافت اطلاعات...
+  </div>
+
+  <div class="legend">
+
+    <div class="legend-title">
+      طبقه خطر آتش‌سوزی
+    </div>
+
+    <div class="legend-row">
+      <span
+        class="legend-color"
+        style="background:#2ecc71"
+      ></span>
+      کم: 0–5
+    </div>
+
+    <div class="legend-row">
+      <span
+        class="legend-color"
+        style="background:#f1c40f"
+      ></span>
+      متوسط: 5–11
+    </div>
+
+    <div class="legend-row">
+      <span
+        class="legend-color"
+        style="background:#e67e22"
+      ></span>
+      زیاد: 11–21
+    </div>
+
+    <div class="legend-row">
+      <span
+        class="legend-color"
+        style="background:#e74c3c"
+      ></span>
+      بسیار زیاد: 21–38
+    </div>
+
+    <div class="legend-row">
+      <span
+        class="legend-color"
+        style="background:#8e44ad"
+      ></span>
+      بسیار شدید: بالاتر از 38
+    </div>
+
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+
+    // ===============================
+    // ایجاد نقشه
+    // ===============================
+
+    const map = L.map("map").setView(
+      [29.6, 52.5],
+      7
+    );
+
+
+    // ===============================
+    // نقشه پایه
+    // ===============================
+
+    L.tileLayer(
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      {
+        maxZoom: 18,
+
+        attribution:
+          "&copy; OpenStreetMap"
+      }
+    ).addTo(map);
+
+
+    // ===============================
+    // رنگ FWI
+    // ===============================
+
+    function fwiColor(value) {
+
+      if (value <= 5)
+        return "#2ecc71";
+
+      if (value <= 11)
+        return "#f1c40f";
+
+      if (value <= 21)
+        return "#e67e22";
+
+      if (value <= 38)
+        return "#e74c3c";
+
+      return "#8e44ad";
+    }
+
+
+    // ===============================
+    // طبقه خطر
+    // ===============================
+
+    function fwiClass(value) {
+
+      if (value <= 5)
+        return "کم";
+
+      if (value <= 11)
+        return "متوسط";
+
+      if (value <= 21)
+        return "زیاد";
+
+      if (value <= 38)
+        return "بسیار زیاد";
+
+      return "بسیار شدید";
+    }
+
+
+    // ===============================
+    // دریافت داده‌ها
+    // ===============================
+
+    Promise.all([
+
+      fetch("data/fwi_fars.json")
+        .then(response => {
+
+          if (!response.ok)
+            throw new Error(
+              "fwi_fars.json پیدا نشد"
+            );
+
+          return response.json();
+        }),
+
+      fetch("fars.geojson")
+        .then(response => {
+
+          if (!response.ok)
+            throw new Error(
+              "fars.geojson پیدا نشد"
+            );
+
+          return response.json();
+        })
+
+    ])
+
+    .then(([fwiData, fars]) => {
+
+      document.getElementById(
+        "loading"
+      ).style.display = "none";
+
+
+      // ===============================
+      // مرز فارس
+      // ===============================
+
+      const boundary =
+        L.geoJSON(
+          fars,
+          {
+            style: {
+
+              color: "#222",
+
+              weight: 2,
+
+              fill: false
+            }
+          }
+        ).addTo(map);
+
+
+      // ===============================
+      // زوم روی فارس
+      // ===============================
+
+      if (
+        boundary.getBounds().isValid()
+      ) {
+
+        map.fitBounds(
+          boundary.getBounds(),
+          {
+            padding: [20, 20]
+          }
+        );
+      }
+
+
+      // ===============================
+      // نقاط FWI
+      // ===============================
+
+      const points =
+        fwiData.points || [];
+
+
+      if (!points.length) {
+
+        document.getElementById(
+          "info"
+        ).innerHTML =
+
+          "<b>خطا</b><br>" +
+          "هیچ داده FWI پیدا نشد.";
+
+        return;
+      }
+
+
+      // ===============================
+      // آمار
+      // ===============================
+
+      let min = Infinity;
+
+      let max = -Infinity;
+
+      let sum = 0;
+
+      let count = 0;
+
+
+      // ===============================
+      // رسم نقاط
+      // ===============================
+
+      points.forEach(point => {
+
+        const value =
+          Number(point.fwi);
+
+
+        if (
+          !Number.isFinite(value) ||
+          !Number.isFinite(
+            Number(point.lat)
+          ) ||
+          !Number.isFinite(
+            Number(point.lon)
+          )
+        ) {
+
+          return;
+        }
+
+
+        min =
+          Math.min(
+            min,
+            value
+          );
+
+
+        max =
+          Math.max(
+            max,
+            value
+          );
+
+
+        sum += value;
+
+        count++;
+
+
+        // =============================
+        // نقطه روی نقشه
+        // =============================
+
+        const marker =
+          L.circleMarker(
+
+            [
+              Number(point.lat),
+
+              Number(point.lon)
+            ],
+
+            {
+
+              radius: 10,
+
+              color: "#ffffff",
+
+              weight: 1,
+
+              fillColor:
+                fwiColor(value),
+
+              fillOpacity: 0.85
+            }
+
+          ).addTo(map);
+
+
+        // =============================
+        // پنجره اطلاعات
+        // =============================
+
+        marker.bindPopup(`
+
+          <div
+            style="
+              direction:rtl;
+              text-align:right;
+              min-width:170px;
+            "
+          >
+
+            <b>
+              شاخص خطر آتش‌سوزی
+            </b>
+
+            <hr>
+
+            <b>FWI:</b>
+            ${value.toFixed(2)}
+
+            <br>
+
+            <b>طبقه خطر:</b>
+            ${fwiClass(value)}
+
+            <br>
+
+            <b>عرض جغرافیایی:</b>
+            ${Number(point.lat).toFixed(5)}
+
+            <br>
+
+            <b>طول جغرافیایی:</b>
+            ${Number(point.lon).toFixed(5)}
+
+          </div>
+
+        `);
+
+      });
+
+
+      // ===============================
+      // میانگین
+      // ===============================
+
+      const mean =
+        count > 0
+          ? sum / count
+          : 0;
+
+
+      // ===============================
+      // اطلاعات آماری
+      // ===============================
+
+      document.getElementById(
+        "info"
+      ).innerHTML = `
+
+        <b>
+          اطلاعات FWI
+        </b>
+
+        <br>
+
+        تاریخ:
+        ${fwiData.date}
+
+        <br>
+
+        تعداد نقاط:
+        ${count}
+
+        <br>
+
+        حداقل:
+        ${min.toFixed(2)}
+
+        <br>
+
+        حداکثر:
+        ${max.toFixed(2)}
+
+        <br>
+
+        میانگین:
+        ${mean.toFixed(2)}
+
+      `;
+
+    })
+
+
+    // ===============================
+    // خطا
+    // ===============================
+
+    .catch(error => {
+
+      console.error(error);
+
+
+      document.getElementById(
+        "loading"
+      ).innerHTML =
+
+        "خطا در دریافت داده FWI";
+
+
+      document.getElementById(
+        "info"
+      ).innerHTML =
+
+        "<b>خطا</b><br>" +
+        error.message;
+
+    });
+
+  </script>
+
+</body>
+</html>
+```
