@@ -23,9 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes numpy geopandas shapely
+          pip install "cdsapi>=0.7.7" xarray cfgrib eccodes numpy geopandas shapely jdatetime
 
-      - name: Download FWI
+      - name: Download FWI for tomorrow
         env:
           EWDS_API_KEY: ${{ secrets.EWDS_API_KEY }}
         run: |
@@ -34,6 +34,30 @@ jobs:
           cat > request_fwi.py <<'PY'
           import os
           import cdsapi
+          from datetime import datetime, timedelta
+          import jdatetime
+
+          # امروز UTC
+          today = datetime.utcnow().date()
+
+          # فردا
+          target_date = today + timedelta(days=1)
+
+          # تبدیل میلادی به شمسی
+          shamsi = jdatetime.date.fromgregorian(
+              year=target_date.year,
+              month=target_date.month,
+              day=target_date.day
+          )
+
+          print("================================")
+          print("FWI TARGET DATE")
+          print("================================")
+          print("Gregorian:",
+                target_date.strftime("%Y-%m-%d"))
+          print("Shamsi:",
+                f"{shamsi.year:04d}-{shamsi.month:02d}-{shamsi.day:02d}")
+          print("================================")
 
           client = cdsapi.Client(
               url="https://ewds.climate.copernicus.eu/api",
@@ -45,9 +69,9 @@ jobs:
               "variable": "fire_weather_index",
               "dataset_type": "consolidated_dataset",
               "system_version": "4_1",
-              "year": "2025",
-              "month": "08",
-              "day": "20",
+              "year": f"{target_date.year:04d}",
+              "month": f"{target_date.month:02d}",
+              "day": f"{target_date.day:02d}",
               "grid": "original_grid",
               "data_format": "grib",
               "area": [32, 50, 27, 55.8]
@@ -58,6 +82,13 @@ jobs:
               request,
               "data/fwi_fars.grib"
           )
+
+          # ذخیره تاریخ برای مرحله استخراج
+          with open("data/fwi_date.txt", "w", encoding="utf-8") as f:
+              f.write(
+                  f"{target_date.strftime('%Y-%m-%d')}|"
+                  f"{shamsi.year:04d}-{shamsi.month:02d}-{shamsi.day:02d}"
+              )
           PY
 
           python request_fwi.py
@@ -75,9 +106,7 @@ jobs:
           BOUNDARY_FILE = "fars.geojson"
           OUTPUT_FILE = "data/fwi_fars.json"
 
-          print("================================")
-          print("Reading FWI...")
-          print("================================")
+          print("Reading GRIB...")
 
           ds = xr.open_dataset(
               GRIB_FILE,
@@ -91,62 +120,26 @@ jobs:
           print("Dimensions:", dict(ds.sizes))
           print("Coordinates:", list(ds.coords))
 
-          if "fwinx" not in ds:
-              raise RuntimeError(
-                  "Variable fwinx was not found."
-              )
-
           da = ds["fwinx"]
 
-          values = np.asarray(
-              da.values
-          ).squeeze()
+          values = np.asarray(da.values).squeeze()
 
           print("FWI shape:", values.shape)
           print("FWI dimensions:", da.dims)
 
-          # -----------------------------------------
-          # خواندن مرز استان فارس
-          # -----------------------------------------
+          # تاریخ
+          with open(
+              "data/fwi_date.txt",
+              "r",
+              encoding="utf-8"
+          ) as f:
+              gregorian_date, shamsi_date = f.read().strip().split("|")
 
-          fars = gpd.read_file(
-              BOUNDARY_FILE
-          )
-
-          if fars.empty:
-              raise RuntimeError(
-                  "fars.geojson is empty."
-              )
-
-          if fars.crs is None:
-              fars = fars.set_crs(
-                  "EPSG:4326"
-              )
-          else:
-              fars = fars.to_crs(
-                  "EPSG:4326"
-              )
-
-          geometry = fars.geometry.union_all()
-
-          print("Fars boundary loaded.")
-
-          points = []
-
-          # =========================================
-          # حالت 1: شبکه دوبعدی
-          # =========================================
+          # ---------------------------------
+          # حالت استاندارد شبکه‌ای
+          # ---------------------------------
 
           if values.ndim == 2:
-
-              if (
-                  "latitude" not in ds.coords
-                  or
-                  "longitude" not in ds.coords
-              ):
-                  raise RuntimeError(
-                      "Latitude/longitude coordinates not found."
-                  )
 
               latitudes = np.asarray(
                   ds["latitude"].values
@@ -156,15 +149,22 @@ jobs:
                   ds["longitude"].values
               )
 
-              print(
-                  "Latitude count:",
-                  len(latitudes)
+              fars = gpd.read_file(
+                  BOUNDARY_FILE
               )
 
-              print(
-                  "Longitude count:",
-                  len(longitudes)
-              )
+              if fars.crs is None:
+                  fars = fars.set_crs(
+                      "EPSG:4326"
+                  )
+              else:
+                  fars = fars.to_crs(
+                      "EPSG:4326"
+                  )
+
+              geometry = fars.geometry.union_all()
+
+              points = []
 
               for i, lat in enumerate(latitudes):
 
@@ -180,27 +180,23 @@ jobs:
                           float(lat)
                       )
 
-                      # فقط داخل فارس
-                      if geometry.covers(point):
+                      if geometry.contains(point):
 
                           points.append({
-                              "fwi": round(
-                                  float(value),
-                                  3
-                              ),
                               "lat": round(
-                                  float(lat),
-                                  6
+                                  float(lat), 6
                               ),
                               "lon": round(
-                                  float(lon),
-                                  6
+                                  float(lon), 6
+                              ),
+                              "fwi": round(
+                                  float(value), 3
                               )
                           })
 
-          # =========================================
-          # حالت 2: فایل CEMS با 339 سلول
-          # =========================================
+          # ---------------------------------
+          # حالت 1 بعدی
+          # ---------------------------------
 
           elif values.ndim == 1:
 
@@ -209,88 +205,57 @@ jobs:
               )
 
               if (
-                  "latitude" not in ds.coords
-                  or
-                  "longitude" not in ds.coords
+                  "latitude" in ds.variables
+                  and
+                  "longitude" in ds.variables
               ):
-                  raise RuntimeError(
-                      "Latitude/longitude coordinates "
-                      "for the 1D FWI cells were not found."
+
+                  latitudes = np.asarray(
+                      ds["latitude"].values
                   )
 
-              latitudes = np.asarray(
-                  ds["latitude"].values
-              ).squeeze()
-
-              longitudes = np.asarray(
-                  ds["longitude"].values
-              ).squeeze()
-
-              print(
-                  "FWI cells:",
-                  len(values)
-              )
-
-              print(
-                  "Latitude cells:",
-                  len(latitudes)
-              )
-
-              print(
-                  "Longitude cells:",
-                  len(longitudes)
-              )
-
-              if len(latitudes) != len(values):
-                  raise RuntimeError(
-                      "Latitude count does not match FWI count."
+                  longitudes = np.asarray(
+                      ds["longitude"].values
                   )
 
-              if len(longitudes) != len(values):
-                  raise RuntimeError(
-                      "Longitude count does not match FWI count."
-                  )
+              else:
+
+                  latitudes = None
+                  longitudes = None
+
+              points = []
 
               for i, value in enumerate(values):
 
                   if not np.isfinite(value):
                       continue
 
-                  lat = float(
-                      latitudes[i]
-                  )
+                  item = {
+                      "index": i,
+                      "fwi": round(
+                          float(value), 3
+                      )
+                  }
 
-                  lon = float(
-                      longitudes[i]
-                  )
+                  if (
+                      latitudes is not None
+                      and
+                      longitudes is not None
+                      and
+                      len(latitudes) == len(values)
+                      and
+                      len(longitudes) == len(values)
+                  ):
 
-                  point = Point(
-                      lon,
-                      lat
-                  )
+                      item["lat"] = round(
+                          float(latitudes[i]), 6
+                      )
 
-                  # ---------------------------------
-                  # مهم:
-                  # فقط نقاط داخل مرز استان فارس
-                  # ---------------------------------
+                      item["lon"] = round(
+                          float(longitudes[i]), 6
+                      )
 
-                  if geometry.covers(point):
-
-                      points.append({
-                          "index": i,
-                          "fwi": round(
-                              float(value),
-                              3
-                          ),
-                          "lat": round(
-                              lat,
-                              6
-                          ),
-                          "lon": round(
-                              lon,
-                              6
-                          )
-                      })
+                  points.append(item)
 
           else:
 
@@ -298,15 +263,20 @@ jobs:
                   f"Unsupported FWI shape: {values.shape}"
               )
 
-          # =========================================
-          # ساخت خروجی
-          # =========================================
+          # ---------------------------------
+          # خروجی
+          # ---------------------------------
 
           output = {
-              "date": "2025-08-20",
+              "date": gregorian_date,
+              "date_shamsi": shamsi_date,
               "variable": "fwinx",
-              "source": "Copernicus CEMS Fire Weather Index",
-              "region": "Fars Province, Iran",
+              "source":
+                  "Copernicus CEMS Fire Weather Index",
+              "region":
+                  "Fars Province, Iran",
+              "forecast":
+                  "tomorrow",
               "points": points
           }
 
@@ -323,22 +293,14 @@ jobs:
                   indent=2
               )
 
-          # =========================================
-          # گزارش نتیجه
-          # =========================================
-
-          print("")
           print("================================")
           print("FWI FARS RESULT")
           print("================================")
-
+          print("Gregorian date:", gregorian_date)
+          print("Shamsi date:", shamsi_date)
+          print("Forecast: TOMORROW")
           print(
-              "Total FWI cells:",
-              len(values)
-          )
-
-          print(
-              "Cells inside Fars:",
+              "Number of values:",
               len(points)
           )
 
@@ -368,20 +330,12 @@ jobs:
                   )
               )
 
-          else:
-
-              print(
-                  "WARNING: No FWI cells found inside Fars."
-              )
-
           print(
               "Output:",
               OUTPUT_FILE
           )
 
           print("================================")
-
-          ds.close()
           PY
 
           python extract_fwi.py
@@ -402,6 +356,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Update FWI Fars"
+            git commit -m "Update FWI Fars for tomorrow"
             git push
           fi
