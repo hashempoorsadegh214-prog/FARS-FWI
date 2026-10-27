@@ -3,7 +3,7 @@ name: Update FWI Fars
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 1 * * *"
+    - cron: "22 12 * * *"
 
 permissions:
   contents: write
