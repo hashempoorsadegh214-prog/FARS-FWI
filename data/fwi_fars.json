@@ -1,7 +1,7 @@
 {
-  "forecast_gregorian": "2026-11-26",
-  "forecast_shamsi": "1405-09-05",
-  "generated_at_iran": "2026-11-25 02:04",
+  "forecast_gregorian": "2026-11-27",
+  "forecast_shamsi": "1405-09-06",
+  "generated_at_iran": "2026-11-26 01:18",
   "source": "Copernicus EFFIS / ECMWF",
   "layer": "ecmwf.query",
   "display_layer": "ecmwf.fwi",
